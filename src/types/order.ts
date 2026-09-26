@@ -1,6 +1,8 @@
-export type OrderStatus = 'pending_payment' | 'cooking' | 'ready' | 'completed' | 'cancelled';
+export type OrderStatus = 'pending_payment' | 'cooking' | 'ready' | 'on_delivery' | 'completed' | 'cancelled';
 
 export type PaymentMethod = 'cashier' | 'qris';
+
+export type OrderType = 'dine_in' | 'delivery' | 'takeaway';
 
 export interface MenuItemOption {
   name: string;
@@ -39,11 +41,36 @@ export interface CartItem {
   image: string;
 }
 
+export interface DeliveryZone {
+  id: string;
+  name: string;
+  description: string;
+  fee: number;
+  estimatedTime: string;
+  isActive: boolean;
+}
+
+export interface DeliverySettings {
+  isEnabled: boolean;
+  minOrderAmount: number;
+  freeDeliveryThreshold?: number;
+  whatsappNumber: string;
+  zones: DeliveryZone[];
+}
+
 export interface Order {
   id: string;
   orderNumber: string; // e.g. "ORD-082"
-  tableNumber: string; // e.g. "05"
+  orderType?: OrderType; // 'dine_in' | 'delivery' | 'takeaway'
+  tableNumber: string; // e.g. "05" or "DLV" or "TA"
   customerName: string;
+  customerPhone?: string; // untuk konfirmasi & delivery
+  deliveryAddress?: string; // alamat pengantaran
+  deliveryNotes?: string; // patokan rumah / instruksi kurir
+  deliveryZoneId?: string;
+  deliveryZoneName?: string;
+  deliveryFee?: number; // ongkos kirim
+  pickupTime?: string; // untuk takeaway
   items: CartItem[];
   subtotal: number;
   tax: number; // 10% PB1

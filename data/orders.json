@@ -1,5 +1,43 @@
 [
   {
+    "id": "ord_1790424650478_so7ml",
+    "orderNumber": "ORD-007",
+    "orderType": "delivery",
+    "tableNumber": "DLV",
+    "customerName": "Budi Santoso (Delivery Test)",
+    "customerPhone": "081234567890",
+    "deliveryAddress": "Jl. Melati No. 8 RT 02/05",
+    "deliveryNotes": "Pagar putih sebelah warung kelontong",
+    "deliveryZoneId": "zone-1",
+    "deliveryZoneName": "Zona 1 - Radius Dekat (< 2 km)",
+    "deliveryFee": 5000,
+    "items": [
+      {
+        "itemId": "hr-ayam-01",
+        "name": "Ayam Kampung Goreng Super",
+        "basePrice": 19000,
+        "unitPrice": 19000,
+        "quantity": 2,
+        "selectedOptions": [
+          {
+            "optionName": "Pilihan Varian Sambal",
+            "choiceLabel": "Sambal Terasi",
+            "extraPrice": 0
+          }
+        ],
+        "image": "/menu/ayam-kampung.jpg"
+      }
+    ],
+    "subtotal": 38000,
+    "tax": 3800,
+    "total": 46800,
+    "paymentMethod": "cashier",
+    "isPaid": false,
+    "status": "pending_payment",
+    "createdAt": "2026-09-26T12:10:50.478Z",
+    "updatedAt": "2026-09-26T12:10:50.478Z"
+  },
+  {
     "id": "ord_1790051821570_5qrwi",
     "orderNumber": "ORD-006",
     "tableNumber": "01",
@@ -33,7 +71,9 @@
     "isPaid": true,
     "status": "cooking",
     "createdAt": "2026-09-22T04:37:01.570Z",
-    "updatedAt": "2026-09-22T04:37:01.570Z"
+    "updatedAt": "2026-09-22T04:37:01.570Z",
+    "orderType": "dine_in",
+    "deliveryFee": 0
   },
   {
     "id": "ord_1790051788711_994ps",
@@ -89,7 +129,9 @@
     "isPaid": true,
     "status": "cooking",
     "createdAt": "2026-09-22T04:36:28.711Z",
-    "updatedAt": "2026-09-22T04:36:28.711Z"
+    "updatedAt": "2026-09-22T04:36:28.711Z",
+    "orderType": "dine_in",
+    "deliveryFee": 0
   },
   {
     "id": "ord_1790051375553_bl9g6",
@@ -145,7 +187,9 @@
     "isPaid": false,
     "status": "pending_payment",
     "createdAt": "2026-09-22T04:29:35.553Z",
-    "updatedAt": "2026-09-22T04:29:35.553Z"
+    "updatedAt": "2026-09-22T04:29:35.553Z",
+    "orderType": "dine_in",
+    "deliveryFee": 0
   },
   {
     "id": "ord_1790045869158_fu2h9",
@@ -197,7 +241,9 @@
     "isPaid": true,
     "status": "cooking",
     "createdAt": "2026-09-22T02:57:49.158Z",
-    "updatedAt": "2026-09-22T02:57:49.158Z"
+    "updatedAt": "2026-09-22T02:57:49.158Z",
+    "orderType": "dine_in",
+    "deliveryFee": 0
   },
   {
     "id": "ord_1789993749337_7oxmo",
@@ -228,7 +274,9 @@
     "isPaid": true,
     "status": "completed",
     "createdAt": "2026-09-21T12:29:09.337Z",
-    "updatedAt": "2026-09-22T04:16:13.025Z"
+    "updatedAt": "2026-09-22T04:16:13.025Z",
+    "orderType": "dine_in",
+    "deliveryFee": 0
   },
   {
     "id": "ord_1789986488289_tta5z",
@@ -275,6 +323,8 @@
     "isPaid": true,
     "status": "cooking",
     "createdAt": "2026-09-21T10:28:08.289Z",
-    "updatedAt": "2026-09-21T10:28:13.877Z"
+    "updatedAt": "2026-09-21T10:28:13.877Z",
+    "orderType": "dine_in",
+    "deliveryFee": 0
   }
 ]

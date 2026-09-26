@@ -17,7 +17,7 @@ export async function GET() {
   const totalOmzet = validOrders.reduce((sum, o) => sum + (o.isPaid || o.status === 'completed' ? o.total : 0), 0);
   const potentialOmzet = validOrders.reduce((sum, o) => sum + o.total, 0);
   const totalOrders = validOrders.length;
-  const activeOrders = validOrders.filter(o => o.status === 'cooking' || o.status === 'pending_payment' || o.status === 'ready').length;
+  const activeOrders = validOrders.filter(o => o.status === 'cooking' || o.status === 'pending_payment' || o.status === 'ready' || o.status === 'on_delivery').length;
   const completedOrders = validOrders.filter(o => o.status === 'completed').length;
 
   // Breakdown Metode Pembayaran

@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { Order, OrderStatus, PaymentMethod, CartItem } from '@/types/order';
+import { Order, OrderStatus, PaymentMethod, CartItem, OrderType } from '@/types/order';
 
 const isVercel = process.env.VERCEL === '1';
 const DATA_DIR = isVercel ? '/tmp/data' : path.join(process.cwd(), 'data');
@@ -36,8 +36,16 @@ export function getAllOrders(): Order[] {
     if (fs.existsSync(DATA_FILE)) {
       const raw = fs.readFileSync(DATA_FILE, 'utf-8');
       const orders: Order[] = JSON.parse(raw || '[]');
-      globalThis.__CACHED_ORDERS__ = orders;
-      return orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      
+      // Preserve existing data: ensure backward-compatible defaults
+      const sanitized = orders.map(o => ({
+        ...o,
+        orderType: o.orderType || 'dine_in',
+        deliveryFee: o.deliveryFee || 0,
+      }));
+
+      globalThis.__CACHED_ORDERS__ = sanitized;
+      return sanitized.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     }
   } catch (err) {
     console.error('Failed reading orders file, using in-memory cache:', err);
@@ -51,8 +59,16 @@ export function getOrderById(id: string): Order | null {
 }
 
 export function createOrder(payload: {
-  tableNumber: string;
+  tableNumber?: string;
   customerName: string;
+  customerPhone?: string;
+  deliveryAddress?: string;
+  deliveryNotes?: string;
+  deliveryZoneId?: string;
+  deliveryZoneName?: string;
+  deliveryFee?: number;
+  pickupTime?: string;
+  orderType?: OrderType;
   items: CartItem[];
   paymentMethod: PaymentMethod;
   isPaid?: boolean;
@@ -62,22 +78,48 @@ export function createOrder(payload: {
 
   const subtotal = payload.items.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0);
   const tax = Math.round(subtotal * 0.1); // PB1 10%
-  const total = subtotal + tax;
+  const deliveryFee = payload.orderType === 'delivery' ? (payload.deliveryFee || 0) : 0;
+  const total = subtotal + tax + deliveryFee;
 
   const orderSeq = (orders.length + 1).toString().padStart(3, '0');
   const now = new Date().toISOString();
 
+  const orderType = payload.orderType || 'dine_in';
+  let tableNumber = (payload.tableNumber || '').trim();
+  if (!tableNumber) {
+    if (orderType === 'delivery') tableNumber = 'DLV';
+    else if (orderType === 'takeaway') tableNumber = 'TA';
+    else tableNumber = '01';
+  } else if (!isNaN(Number(tableNumber))) {
+    tableNumber = tableNumber.padStart(2, '0');
+  }
+
+  const defaultCustomerName =
+    orderType === 'delivery'
+      ? 'Pelanggan Delivery'
+      : orderType === 'takeaway'
+      ? 'Pelanggan Takeaway'
+      : `Tamu Meja ${tableNumber}`;
+
   const newOrder: Order = {
     id: `ord_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
     orderNumber: `ORD-${orderSeq}`,
-    tableNumber: payload.tableNumber.trim().padStart(2, '0'),
-    customerName: payload.customerName.trim() || 'Tamu Meja ' + payload.tableNumber,
+    orderType,
+    tableNumber,
+    customerName: payload.customerName?.trim() || defaultCustomerName,
+    customerPhone: payload.customerPhone?.trim(),
+    deliveryAddress: payload.deliveryAddress?.trim(),
+    deliveryNotes: payload.deliveryNotes?.trim(),
+    deliveryZoneId: payload.deliveryZoneId,
+    deliveryZoneName: payload.deliveryZoneName,
+    deliveryFee,
+    pickupTime: payload.pickupTime?.trim(),
     items: payload.items,
     subtotal,
     tax,
     total,
     paymentMethod: payload.paymentMethod,
-    isPaid: payload.isPaid ?? (payload.paymentMethod === 'qris'), // Jika QRIS langsung tandai lunas untuk simulasi
+    isPaid: payload.isPaid ?? (payload.paymentMethod === 'qris'),
     status: payload.isPaid || payload.paymentMethod === 'qris' ? 'cooking' : 'pending_payment',
     createdAt: now,
     updatedAt: now,

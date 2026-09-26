@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { RESTAURANT_INFO, CATEGORIES } from '@/data/menu';
-import { MenuItem, Order } from '@/types/order';
+import { MenuItem, Order, DeliverySettings, DeliveryZone } from '@/types/order';
 
 interface ReportData {
   date: string;
@@ -23,7 +23,7 @@ interface ReportData {
 }
 
 export default function AdminDashboardPage() {
-  const [activeTab, setActiveTab] = useState<'analytics' | 'stock' | 'catalog'>('analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'catalog' | 'delivery' | 'stock'>('analytics');
   const [report, setReport] = useState<ReportData | null>(null);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('Semua');
@@ -33,6 +33,17 @@ export default function AdminDashboardPage() {
   const [currentTime, setCurrentTime] = useState<string>('');
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [printingOrder, setPrintingOrder] = useState<Order | null>(null);
+
+  // Delivery Settings State
+  const [deliverySettings, setDeliverySettings] = useState<DeliverySettings | null>(null);
+  const [isSavingDelivery, setIsSavingDelivery] = useState(false);
+  const [isZoneModalOpen, setIsZoneModalOpen] = useState(false);
+  const [editingZone, setEditingZone] = useState<DeliveryZone | null>(null);
+  const [zoneName, setZoneName] = useState('');
+  const [zoneDesc, setZoneDesc] = useState('');
+  const [zoneFee, setZoneFee] = useState<number | string>('');
+  const [zoneTime, setZoneTime] = useState('');
+  const [zoneActive, setZoneActive] = useState(true);
 
   // Modal State untuk Tambah & Edit Menu
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -60,15 +71,18 @@ export default function AdminDashboardPage() {
 
   const fetchData = async () => {
     try {
-      const [resReport, resMenu] = await Promise.all([
+      const [resReport, resMenu, resDelivery] = await Promise.all([
         fetch('/api/reports'),
-        fetch('/api/menu')
+        fetch('/api/menu'),
+        fetch('/api/delivery'),
       ]);
       const dataReport = await resReport.json();
       const dataMenu = await resMenu.json();
+      const dataDelivery = await resDelivery.json();
 
       if (dataReport.success) setReport(dataReport.data);
       if (dataMenu.success) setMenuItems(dataMenu.items);
+      if (dataDelivery.success) setDeliverySettings(dataDelivery.data);
     } catch (err) {
       console.error('Failed fetching admin data:', err);
     } finally {
@@ -82,7 +96,7 @@ export default function AdminDashboardPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Upload Gambar
+  // Upload Gambar Menu
   const handleFileUpload = async (file: File, isEditing = false) => {
     setIsUploading(true);
     try {
@@ -134,25 +148,24 @@ export default function AdminDashboardPage() {
       const data = await res.json();
       if (data.success) {
         setIsAddModalOpen(false);
-        // Reset Form
         setFormName('');
         setFormPrice('');
         setFormDescription('');
         setFormImage('');
         setFormIsPopular(false);
         fetchData();
-        alert('Menu baru berhasil ditambahkan ke katalog!');
+        alert('Menu baru berhasil ditambahkan!');
       } else {
         alert('Gagal menambah menu: ' + data.error);
       }
     } catch (err) {
       console.error('Create menu error:', err);
-      alert('Terjadi kesalahan saat menambah menu');
+      alert('Terjadi kesalahan saat menambahkan menu');
     }
   };
 
   // Simpan Edit Menu
-  const handleSaveEditMenu = async (e: React.FormEvent) => {
+  const handleUpdateMenu = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem) return;
 
@@ -167,24 +180,22 @@ export default function AdminDashboardPage() {
         setIsEditModalOpen(false);
         setEditingItem(null);
         fetchData();
-        alert('Perubahan menu & harga berhasil disimpan!');
+        alert('Menu berhasil diperbarui!');
       } else {
         alert('Gagal mengupdate menu: ' + data.error);
       }
     } catch (err) {
       console.error('Update menu error:', err);
-      alert('Terjadi kesalahan saat menyimpan perubahan');
+      alert('Terjadi kesalahan saat mengupdate menu');
     }
   };
 
   // Hapus Menu
   const handleDeleteMenu = async (item: MenuItem) => {
-    if (!confirm(`Yakin ingin menghapus menu "${item.name}" dari katalog?`)) return;
+    if (!confirm(`Hapus permanen menu "${item.name}" dari katalog?`)) return;
 
     try {
-      const res = await fetch(`/api/menu?id=${item.id}`, {
-        method: 'DELETE',
-      });
+      const res = await fetch(`/api/menu?id=${item.id}`, { method: 'DELETE' });
       const data = await res.json();
       if (data.success) {
         setMenuItems(prev => prev.filter(m => m.id !== item.id));
@@ -222,7 +233,7 @@ export default function AdminDashboardPage() {
     }
   };
 
-  // Konfirmasi Pembayaran Kasir langsung dari /admin
+  // Konfirmasi Pembayaran Kasir
   const handleConfirmPayment = async (orderId: string, paymentMethod: 'cash' | 'qris') => {
     try {
       const res = await fetch(`/api/orders/${orderId}`, {
@@ -246,6 +257,158 @@ export default function AdminDashboardPage() {
     }, 200);
   };
 
+  // DELIVERY SETTINGS MANAGEMENT
+  const handleSaveDeliveryGeneral = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!deliverySettings) return;
+
+    setIsSavingDelivery(true);
+    try {
+      const res = await fetch('/api/delivery', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(deliverySettings),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('Pengaturan delivery & ongkir berhasil disimpan!');
+      } else {
+        alert('Gagal menyimpan pengaturan: ' + data.error);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Terjadi kesalahan jaringan.');
+    } finally {
+      setIsSavingDelivery(false);
+    }
+  };
+
+  const handleToggleDeliveryService = async () => {
+    if (!deliverySettings) return;
+    const updated = { ...deliverySettings, isEnabled: !deliverySettings.isEnabled };
+    setDeliverySettings(updated);
+
+    try {
+      await fetch('/api/delivery', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleOpenZoneModal = (zone?: DeliveryZone) => {
+    if (zone) {
+      setEditingZone(zone);
+      setZoneName(zone.name);
+      setZoneDesc(zone.description);
+      setZoneFee(zone.fee);
+      setZoneTime(zone.estimatedTime);
+      setZoneActive(zone.isActive);
+    } else {
+      setEditingZone(null);
+      setZoneName('');
+      setZoneDesc('');
+      setZoneFee(10000);
+      setZoneTime('20 - 35 Menit');
+      setZoneActive(true);
+    }
+    setIsZoneModalOpen(true);
+  };
+
+  const handleSaveZone = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!deliverySettings) return;
+    if (!zoneName.trim() || zoneFee === '') {
+      alert('Nama area dan tarif ongkir wajib diisi!');
+      return;
+    }
+
+    const currentZones = [...(deliverySettings.zones || [])];
+    if (editingZone) {
+      const idx = currentZones.findIndex(z => z.id === editingZone.id);
+      if (idx >= 0) {
+        currentZones[idx] = {
+          ...editingZone,
+          name: zoneName.trim(),
+          description: zoneDesc.trim(),
+          fee: Number(zoneFee) || 0,
+          estimatedTime: zoneTime.trim() || '20 - 35 Menit',
+          isActive: zoneActive,
+        };
+      }
+    } else {
+      const newZone: DeliveryZone = {
+        id: `zone-${Date.now()}`,
+        name: zoneName.trim(),
+        description: zoneDesc.trim(),
+        fee: Number(zoneFee) || 0,
+        estimatedTime: zoneTime.trim() || '20 - 35 Menit',
+        isActive: zoneActive,
+      };
+      currentZones.push(newZone);
+    }
+
+    const updatedSettings = { ...deliverySettings, zones: currentZones };
+    setDeliverySettings(updatedSettings);
+    setIsZoneModalOpen(false);
+
+    try {
+      const res = await fetch('/api/delivery', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedSettings),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(editingZone ? 'Zona ongkir berhasil diperbarui!' : 'Zona ongkir baru berhasil ditambahkan!');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Gagal menyimpan zona ke server.');
+    }
+  };
+
+  const handleDeleteZone = async (zoneId: string) => {
+    if (!deliverySettings) return;
+    if (!confirm('Hapus zona ongkir ini?')) return;
+
+    const filtered = deliverySettings.zones.filter(z => z.id !== zoneId);
+    const updatedSettings = { ...deliverySettings, zones: filtered };
+    setDeliverySettings(updatedSettings);
+
+    try {
+      await fetch('/api/delivery', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedSettings),
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleToggleZoneActive = async (zone: DeliveryZone) => {
+    if (!deliverySettings) return;
+    const currentZones = deliverySettings.zones.map(z => 
+      z.id === zone.id ? { ...z, isActive: !z.isActive } : z
+    );
+    const updatedSettings = { ...deliverySettings, zones: currentZones };
+    setDeliverySettings(updatedSettings);
+
+    try {
+      await fetch('/api/delivery', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedSettings),
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const toIdr = (num: number) => {
     return 'Rp ' + (num || 0).toLocaleString('id-ID');
   };
@@ -260,71 +423,52 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 font-sans pb-16">
-      {/* Top Header - Fully Responsive */}
-      <header className="sticky top-0 z-40 bg-slate-950/95 backdrop-blur-md border-b border-slate-800 shadow-xl px-3 sm:px-6 lg:px-8 py-2.5 sm:py-3.5">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          {/* Brand Info */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5 sm:gap-3.5">
-              <div className="relative w-9 h-9 sm:w-11 sm:h-11 bg-white rounded-xl p-1 shadow-md flex-shrink-0">
-                <Image src="/hrfood-emblem.png" alt="HR Food Emblem" fill className="object-contain" />
-              </div>
-              <div>
-                <div className="flex items-center gap-1.5 sm:gap-2">
-                  <h1 className="text-base sm:text-lg font-black tracking-tight text-white uppercase">{RESTAURANT_INFO.name}</h1>
-                  <span className="bg-red-600 text-white text-[9px] sm:text-[10px] font-black px-1.5 sm:px-2 py-0.5 rounded-full uppercase tracking-wider">
-                    Kasir & Owner
-                  </span>
-                </div>
-                <p className="text-[11px] sm:text-xs text-amber-400 font-medium line-clamp-1">{RESTAURANT_INFO.tagline}</p>
-              </div>
+      {/* Top Header - Responsive */}
+      <header className="bg-slate-850 border-b border-slate-800 sticky top-0 z-30 shadow-md">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2.5 sm:py-3.5 flex flex-wrap items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-white/95 p-1 flex items-center justify-center shadow-md shadow-red-950/60 flex-shrink-0">
+              <img src="/hrfood-emblem.png" alt="HR Food" className="w-full h-full object-contain" />
             </div>
-
-            {/* Jam Digital di Mobile */}
-            <div className="sm:hidden bg-slate-800/90 border border-slate-700 px-2 py-1 rounded-lg text-[11px] font-mono text-slate-300 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
-              <span>{currentTime || '00:00'}</span>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <h1 className="text-sm sm:text-lg font-black text-white tracking-tight truncate">
+                  {RESTAURANT_INFO.name}
+                </h1>
+                <span className="bg-red-600/30 text-red-400 border border-red-500/40 text-[10px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider">
+                  Owner POS
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 hidden xs:block truncate">
+                {RESTAURANT_INFO.tagline} &bull; Jam: <span className="font-mono text-emerald-400">{currentTime}</span>
+              </p>
             </div>
           </div>
 
-          {/* Quick Action Buttons */}
-          <div className="flex items-center gap-1.5 sm:gap-2.5 overflow-x-auto no-scrollbar pb-0.5 sm:pb-0">
-            {/* Jam Digital di Desktop */}
-            <div className="hidden sm:flex bg-slate-800/80 border border-slate-700 px-3 py-1.5 rounded-lg text-xs font-mono text-slate-300 items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-              <span>{currentTime || '00:00:00'}</span>
-            </div>
-
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
             <Link
               href="/kitchen"
-              className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-2.5 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 flex-shrink-0"
+              className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 shadow transition"
+              title="Buka Layar Dapur KDS"
             >
               <span>🍳</span>
-              <span>Dapur (KDS)</span>
-            </Link>
-
-            <Link
-              href="/?table=01"
-              target="_blank"
-              className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-2.5 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 flex-shrink-0"
-            >
-              <span>📱</span>
-              <span className="hidden xs:inline">Menu Tamu</span>
+              <span className="hidden xs:inline">Dapur (KDS)</span>
             </Link>
 
             <button
               onClick={() => setIsPrintModalOpen(true)}
-              className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-3 sm:px-4 py-1.5 rounded-lg text-xs shadow-lg transition flex items-center gap-1 flex-shrink-0"
+              className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
+              title="Cetak Ringkasan Penjualan Hari Ini"
             >
               <span>🖨️</span>
-              <span>Closing Kasir</span>
+              <span className="hidden sm:inline">Closing Kasir</span>
             </button>
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 mt-4 sm:mt-6">
-        {/* KPI METRIC CARDS - 2x2 Grid di HP, 4 Kolom di Desktop */}
+        {/* KPI METRIC CARDS */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 mb-4 sm:mb-6">
           <div className="bg-gradient-to-br from-slate-800 to-slate-850 border border-slate-700/80 rounded-xl sm:rounded-2xl p-3 sm:p-5 shadow-lg relative overflow-hidden">
             <div className="absolute top-0 right-0 w-16 sm:w-24 h-16 sm:h-24 bg-emerald-500/10 rounded-full blur-xl" />
@@ -355,21 +499,23 @@ export default function AdminDashboardPage() {
           </div>
 
           <div className="bg-gradient-to-br from-slate-800 to-slate-850 border border-slate-700/80 rounded-xl sm:rounded-2xl p-3 sm:p-5 shadow-lg relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-16 sm:w-24 h-16 sm:h-24 bg-amber-500/10 rounded-full blur-xl" />
+            <div className="absolute top-0 right-0 w-16 sm:w-24 h-16 sm:h-24 bg-purple-500/10 rounded-full blur-xl" />
             <div className="flex items-center justify-between mb-1 sm:mb-2">
-              <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider">Metode Bayar</span>
-              <span className="text-base sm:text-xl">💳</span>
+              <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider">Status Delivery</span>
+              <span className="text-base sm:text-xl">🛵</span>
             </div>
-            <div className="space-y-0.5 sm:space-y-1 mt-0.5 sm:mt-1">
-              <div className="flex justify-between items-center text-[10px] sm:text-xs">
-                <span className="text-slate-300">💵 Tunai:</span>
-                <span className="font-bold text-amber-300 truncate">{toIdr(report?.payment.cashTotal || 0)}</span>
-              </div>
-              <div className="flex justify-between items-center text-[10px] sm:text-xs">
-                <span className="text-slate-300">📱 QRIS:</span>
-                <span className="font-bold text-blue-400 truncate">{toIdr(report?.payment.qrisTotal || 0)}</span>
-              </div>
+            <div className="text-sm sm:text-xl font-black text-purple-300">
+              {deliverySettings?.isEnabled ? (
+                <span className="text-emerald-400 flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" /> AKTIF ONLINE
+                </span>
+              ) : (
+                <span className="text-rose-400">NON-AKTIF</span>
+              )}
             </div>
+            <p className="text-[10px] sm:text-[11px] text-slate-400 mt-1 truncate">
+              {deliverySettings?.zones?.length || 0} Zona Tarif Terdaftar
+            </p>
           </div>
 
           <div className="bg-gradient-to-br from-slate-800 to-slate-850 border border-slate-700/80 rounded-xl sm:rounded-2xl p-3 sm:p-5 shadow-lg relative overflow-hidden">
@@ -393,7 +539,7 @@ export default function AdminDashboardPage() {
           </div>
         </div>
 
-        {/* 3 Tab Navigasi - Responsive Mobile Scrollable */}
+        {/* 4 Tab Navigasi */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3 mb-4 sm:mb-6">
           <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar pb-1 sm:pb-0">
             <button
@@ -421,6 +567,18 @@ export default function AdminDashboardPage() {
             </button>
 
             <button
+              onClick={() => setActiveTab('delivery')}
+              className={`flex items-center gap-1.5 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl font-bold text-xs transition shadow-sm flex-shrink-0 ${
+                activeTab === 'delivery'
+                  ? 'bg-purple-600 text-white shadow-purple-900/30'
+                  : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-750'
+              }`}
+            >
+              <span>🛵</span>
+              <span>Kelola Ongkir & Delivery</span>
+            </button>
+
+            <button
               onClick={() => setActiveTab('stock')}
               className={`flex items-center gap-1.5 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl font-bold text-xs transition shadow-sm flex-shrink-0 relative ${
                 activeTab === 'stock'
@@ -438,7 +596,6 @@ export default function AdminDashboardPage() {
             </button>
           </div>
 
-          {/* Tombol Tambah Menu jika di Tab Katalog */}
           {activeTab === 'catalog' && (
             <button
               onClick={() => setIsAddModalOpen(true)}
@@ -447,9 +604,18 @@ export default function AdminDashboardPage() {
               <span>➕</span> Tambah Menu Baru
             </button>
           )}
+
+          {activeTab === 'delivery' && (
+            <button
+              onClick={() => handleOpenZoneModal()}
+              className="bg-purple-600 hover:bg-purple-500 text-white font-black px-4 py-2 rounded-xl text-xs shadow-lg transition flex items-center justify-center gap-1.5 flex-shrink-0"
+            >
+              <span>➕</span> Tambah Zona Ongkir
+            </button>
+          )}
         </div>
 
-        {/* TAB 1: ANALYTICS & REKAP */}
+        {/* TAB 1: REKAP OMZET & KASIR */}
         {activeTab === 'analytics' && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -537,6 +703,7 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
 
+              {/* List Transaksi Kasir Hari Ini */}
               <div className="bg-slate-850 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col h-full">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-base font-black text-white flex items-center gap-2">
@@ -547,21 +714,42 @@ export default function AdminDashboardPage() {
                   </span>
                 </div>
 
-                <div className="space-y-3 flex-1 overflow-y-auto max-h-[560px] pr-1">
+                <div className="space-y-3 flex-1 overflow-y-auto max-h-[580px] pr-1">
                   {report?.recentOrders && report.recentOrders.length > 0 ? (
                     report.recentOrders.map(order => {
                       const timeStr = new Date(order.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+                      const orderType = order.orderType || 'dine_in';
+
                       return (
-                        <div key={order.id} className="bg-slate-800/90 border border-slate-750 p-3.5 rounded-xl">
-                          <div className="flex justify-between items-start mb-2">
+                        <div key={order.id} className="bg-slate-800/90 border border-slate-750 p-3.5 rounded-xl space-y-2">
+                          <div className="flex justify-between items-start">
                             <div>
-                              <span className="font-black text-sm text-amber-400">MEJA {order.tableNumber}</span>
+                              {orderType === 'delivery' ? (
+                                <span className="font-black text-xs px-2 py-0.5 rounded bg-purple-600 text-white">
+                                  🛵 DELIVERY
+                                </span>
+                              ) : orderType === 'takeaway' ? (
+                                <span className="font-black text-xs px-2 py-0.5 rounded bg-emerald-600 text-white">
+                                  🛍️ BUNGKUS
+                                </span>
+                              ) : (
+                                <span className="font-black text-sm text-amber-400">MEJA {order.tableNumber}</span>
+                              )}
                               <span className="text-[11px] text-slate-400 ml-2 font-mono">{order.orderNumber}</span>
                             </div>
                             <span className="text-[10px] text-slate-400">{timeStr}</span>
                           </div>
 
-                          <div className="text-xs text-slate-300 space-y-1 mb-2">
+                          <div className="text-xs text-slate-300">
+                            <p className="font-bold text-white truncate">👤 {order.customerName}</p>
+                            {orderType === 'delivery' && (
+                              <p className="text-[11px] text-purple-300 mt-0.5">
+                                📍 {order.deliveryAddress}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="text-xs text-slate-300 space-y-1">
                             {order.items.map((it, i) => (
                               <div key={i} className="flex justify-between text-[11px]">
                                 <span className="truncate pr-2">{it.quantity}x {it.name}</span>
@@ -570,7 +758,7 @@ export default function AdminDashboardPage() {
                             ))}
                           </div>
 
-                          <div className="border-t border-slate-700/80 pt-2.5 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 text-xs">
+                          <div className="border-t border-slate-700/80 pt-2 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 text-xs">
                             <div className="flex items-center justify-between sm:justify-start gap-2">
                               <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                                 order.isPaid ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-red-950 text-red-300 border border-red-800'
@@ -580,8 +768,26 @@ export default function AdminDashboardPage() {
                               <span className="font-black text-emerald-400 text-xs sm:hidden">{toIdr(order.total)}</span>
                             </div>
 
-                            <div className="flex items-center gap-1.5 justify-end">
+                            <div className="flex items-center gap-1.5 justify-end flex-wrap">
                               <span className="font-black text-emerald-400 hidden sm:inline mr-2">{toIdr(order.total)}</span>
+
+                              {/* Tombol Chat WA Customer / Driver */}
+                              {order.customerPhone && (
+                                <a
+                                  href={`https://wa.me/${order.customerPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
+                                    `Halo Kak ${order.customerName}, kami dari HR Food mengonfirmasi pesanan ${order.orderNumber}:\n` +
+                                    order.items.map(it => `- ${it.quantity}x ${it.name}`).join('\n') +
+                                    `\nTotal: ${toIdr(order.total)}\nStatus: ${order.isPaid ? 'LUNAS' : 'Belum Lunas'}`
+                                  )}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="p-1.5 px-2 rounded-lg bg-emerald-600/30 text-emerald-400 hover:bg-emerald-600/50 text-xs font-semibold flex items-center gap-1"
+                                  title="Chat WhatsApp Customer"
+                                >
+                                  <span>💬</span>
+                                  <span className="hidden xs:inline">WA</span>
+                                </a>
+                              )}
 
                               <button
                                 onClick={() => handlePrintReceipt(order)}
@@ -596,14 +802,14 @@ export default function AdminDashboardPage() {
                                 <>
                                   <button
                                     onClick={() => handleConfirmPayment(order.id, 'cash')}
-                                    className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-lg text-[11px] font-bold transition flex items-center gap-1 shadow-sm"
+                                    className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-lg text-[11px] font-bold transition flex items-center gap-1 shadow-sm"
                                     title="Tandai Lunas Tunai"
                                   >
                                     <span>💵</span> Tunai
                                   </button>
                                   <button
                                     onClick={() => handleConfirmPayment(order.id, 'qris')}
-                                    className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white rounded-lg text-[11px] font-bold transition flex items-center gap-1 shadow-sm"
+                                    className="px-2 py-1 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white rounded-lg text-[11px] font-bold transition flex items-center gap-1 shadow-sm"
                                     title="Tandai Lunas QRIS"
                                   >
                                     <span>📱</span> QRIS
@@ -646,75 +852,78 @@ export default function AdminDashboardPage() {
                 ))}
               </div>
 
-              <div className="relative min-w-[220px]">
+              <div className="relative min-w-[200px] flex-1 max-w-xs">
                 <input
                   type="text"
-                  placeholder="Cari nama menu..."
+                  placeholder="Cari menu di katalog..."
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-red-500"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-red-500"
                 />
               </div>
             </div>
 
-            {/* Menu Grid dengan Aksi Edit & Hapus */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredMenu.map(item => (
                 <div
                   key={item.id}
-                  className="bg-slate-850 border border-slate-750 hover:border-slate-650 rounded-2xl p-4 transition shadow-md flex flex-col justify-between"
+                  className="bg-slate-850 border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-col justify-between"
                 >
-                  <div>
-                    <div className="relative w-full h-40 rounded-xl overflow-hidden bg-slate-800 mb-3 group">
-                      <Image
-                        src={item.image || '/menu/ayam-kampung.jpg'}
+                  <div className="flex gap-3">
+                    <div className="relative w-20 h-20 rounded-xl overflow-hidden bg-slate-800 flex-shrink-0 border border-slate-750">
+                      <img
+                        src={item.image}
                         alt={item.name}
-                        fill
-                        className="object-cover group-hover:scale-105 transition duration-300"
+                        className="w-full h-full object-cover"
                       />
                       {item.isPopular && (
-                        <span className="absolute top-2 left-2 bg-amber-500 text-slate-950 font-black text-[10px] px-2 py-0.5 rounded shadow">
-                          🔥 Favorit
+                        <span className="absolute top-1 left-1 bg-amber-500 text-slate-950 text-[9px] font-black px-1 rounded shadow">
+                          FAVORIT
                         </span>
                       )}
-                      <div className="absolute top-2 right-2">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          item.isAvailable !== false ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-red-950 text-red-300 border border-red-800'
-                        }`}>
-                          {item.isAvailable !== false ? 'Tersedia' : 'Habis'}
-                        </span>
-                      </div>
                     </div>
 
-                    <div>
-                      <span className="text-[10px] text-amber-400 font-semibold block uppercase tracking-wider">{item.category}</span>
-                      <h3 className="font-bold text-sm text-white mt-0.5 truncate">{item.name}</h3>
-                      <p className="text-xs text-slate-400 mt-1 line-clamp-2">{item.description}</p>
-                      <div className="mt-2 text-base font-black text-emerald-400">
-                        {toIdr(item.price)}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-1">
+                        <h3 className="font-bold text-sm text-white truncate">{item.name}</h3>
+                        <span className="text-xs font-bold text-emerald-400 whitespace-nowrap">
+                          {toIdr(item.price)}
+                        </span>
                       </div>
+                      <p className="text-[11px] text-slate-400 line-clamp-2 mt-1">{item.description}</p>
+                      <span className="inline-block text-[10px] text-slate-400 bg-slate-800 px-2 py-0.5 rounded-full mt-2">
+                        {item.category}
+                      </span>
                     </div>
                   </div>
 
-                  {/* Tombol Aksi Owner */}
-                  <div className="border-t border-slate-750 pt-3 mt-3 flex items-center justify-between gap-2">
-                    <button
-                      onClick={() => {
-                        setEditingItem({ ...item });
-                        setIsEditModalOpen(true);
-                      }}
-                      className="flex-1 bg-amber-500/10 hover:bg-amber-500 text-amber-400 hover:text-slate-950 border border-amber-500/30 text-xs font-bold py-1.5 rounded-lg transition text-center flex items-center justify-center gap-1"
-                    >
-                      <span>✏️</span> Edit Harga & Foto
-                    </button>
+                  <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className={`w-2 h-2 rounded-full ${item.isAvailable !== false ? 'bg-emerald-400' : 'bg-red-500'}`} />
+                      <span className="text-[11px] text-slate-300">
+                        {item.isAvailable !== false ? 'Tersedia' : 'Habis'}
+                      </span>
+                    </div>
 
-                    <button
-                      onClick={() => handleDeleteMenu(item)}
-                      className="bg-red-950/40 hover:bg-red-600 text-red-400 hover:text-white border border-red-800/40 text-xs font-bold px-3 py-1.5 rounded-lg transition"
-                      title="Hapus Menu"
-                    >
-                      🗑️
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => {
+                          setEditingItem({ ...item });
+                          setIsEditModalOpen(true);
+                        }}
+                        className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg text-xs font-bold transition flex items-center gap-1"
+                      >
+                        <span>✏️</span> Edit
+                      </button>
+
+                      <button
+                        onClick={() => handleDeleteMenu(item)}
+                        className="px-2 py-1 bg-red-950/60 hover:bg-red-900 text-red-300 border border-red-800/80 rounded-lg text-xs font-bold transition"
+                        title="Hapus Menu"
+                      >
+                        🗑️
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -722,85 +931,220 @@ export default function AdminDashboardPage() {
           </div>
         )}
 
-        {/* TAB 3: MANAJEMEN STOK (SAKLAR HABIS) */}
-        {activeTab === 'stock' && (
+        {/* TAB 3: KELOLA ONGKIR & DELIVERY (NEW!) */}
+        {activeTab === 'delivery' && (
           <div className="space-y-6">
-            <div className="bg-slate-850 border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-wrap items-center justify-between gap-4">
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
-                {CATEGORIES.map(cat => (
+            {/* Header Delivery Toggle Card */}
+            <div className="bg-slate-850 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+                <div>
+                  <h2 className="text-base font-black text-white flex items-center gap-2">
+                    <span>🛵</span> Konfigurasi Layanan Pesan Antar Online
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Aktifkan pengantaran makanan ke rumah, atur nomor WhatsApp kurir, dan biaya per zona wilayah
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-bold text-slate-300">
+                    Status Layanan:
+                  </span>
                   <button
-                    key={cat}
-                    onClick={() => setSelectedCategory(cat)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition ${
-                      selectedCategory === cat
-                        ? 'bg-amber-400 text-slate-950 shadow'
-                        : 'bg-slate-800 text-slate-300 hover:bg-slate-750'
+                    onClick={handleToggleDeliveryService}
+                    className={`px-4 py-2 rounded-xl text-xs font-black transition flex items-center gap-1.5 shadow ${
+                      deliverySettings?.isEnabled
+                        ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                        : 'bg-rose-900 text-rose-200 border border-rose-700'
                     }`}
                   >
-                    {cat}
+                    <span>{deliverySettings?.isEnabled ? '✅ BUKA PESANAN' : '🔒 TUTUP SEMENTARA'}</span>
                   </button>
-                ))}
+                </div>
               </div>
 
-              <div className="relative min-w-[220px]">
-                <input
-                  type="text"
-                  placeholder="Cari nama menu..."
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-red-500"
-                />
+              {/* Form Parameter Delivery */}
+              {deliverySettings && (
+                <form onSubmit={handleSaveDeliveryGeneral} className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">
+                      Nomor WhatsApp Resto / Kurir *
+                    </label>
+                    <input
+                      type="text"
+                      value={deliverySettings.whatsappNumber || ''}
+                      onChange={e => setDeliverySettings({ ...deliverySettings, whatsappNumber: e.target.value })}
+                      placeholder="Contoh: 6281234567890"
+                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500 font-mono"
+                    />
+                    <span className="text-[10px] text-slate-400 mt-1 block">Gunakan kode negara (62...)</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">
+                      Minimal Belanja Delivery (Rp)
+                    </label>
+                    <input
+                      type="number"
+                      value={deliverySettings.minOrderAmount || 0}
+                      onChange={e => setDeliverySettings({ ...deliverySettings, minOrderAmount: Number(e.target.value) })}
+                      placeholder="Contoh: 15000"
+                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500 font-mono"
+                    />
+                    <span className="text-[10px] text-slate-400 mt-1 block">Batas minimum pesanan diantar</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">
+                      Gratis Ongkir Jika Belanja &gt; (Rp)
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        value={deliverySettings.freeDeliveryThreshold || 0}
+                        onChange={e => setDeliverySettings({ ...deliverySettings, freeDeliveryThreshold: Number(e.target.value) })}
+                        placeholder="Contoh: 150000"
+                        className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500 font-mono"
+                      />
+                      <button
+                        type="submit"
+                        disabled={isSavingDelivery}
+                        className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow transition whitespace-nowrap"
+                      >
+                        {isSavingDelivery ? '...' : '💾 Simpan'}
+                      </button>
+                    </div>
+                    <span className="text-[10px] text-slate-400 mt-1 block">Promo subsidi gratis ongkir</span>
+                  </div>
+                </form>
+              )}
+            </div>
+
+            {/* List Zona Ongkir */}
+            <div className="bg-slate-850 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                    Daftar Zona Tarif Pengantaran ({deliverySettings?.zones?.length || 0})
+                  </h3>
+                  <p className="text-xs text-slate-400">Atur ongkir berdasarkan radius jarak atau area kelurahan/kota</p>
+                </div>
+                <button
+                  onClick={() => handleOpenZoneModal()}
+                  className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 shadow"
+                >
+                  <span>➕</span> Tambah Zona
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                {deliverySettings?.zones?.map(zone => (
+                  <div
+                    key={zone.id}
+                    className={`bg-slate-800/90 border rounded-2xl p-4 shadow flex flex-col justify-between transition ${
+                      zone.isActive ? 'border-purple-500/50' : 'border-slate-700 opacity-60'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-start justify-between gap-2 mb-1.5">
+                        <h4 className="font-bold text-sm text-white">{zone.name}</h4>
+                        <span className="text-sm font-black text-purple-400 whitespace-nowrap">
+                          {toIdr(zone.fee)}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-300 leading-relaxed mb-2">{zone.description}</p>
+                      <span className="inline-block text-[11px] font-mono bg-slate-750 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded-lg">
+                        ⏱️ Estimasi: {zone.estimatedTime}
+                      </span>
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-slate-750 flex items-center justify-between">
+                      <button
+                        onClick={() => handleToggleZoneActive(zone)}
+                        className={`text-[11px] font-bold px-2 py-0.5 rounded-lg transition ${
+                          zone.isActive
+                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                            : 'bg-slate-700 text-slate-400'
+                        }`}
+                      >
+                        {zone.isActive ? '✓ Aktif' : 'Non-Aktif'}
+                      </button>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => handleOpenZoneModal(zone)}
+                          className="px-2.5 py-1 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 rounded-lg text-xs font-bold transition"
+                        >
+                          ✏️ Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteZone(zone.id)}
+                          className="px-2 py-1 bg-red-950/60 hover:bg-red-900 text-red-300 border border-red-800/80 rounded-lg text-xs font-bold transition"
+                          title="Hapus Zona"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 4: SAKLAR STOK CEPAT */}
+        {activeTab === 'stock' && (
+          <div className="space-y-6">
+            <div className="bg-slate-850 border border-slate-800 rounded-2xl p-4 shadow-xl flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-bold text-white uppercase tracking-wider">
+                  Saklar Stok Menu Cepat
+                </h2>
+                <p className="text-xs text-slate-400">Klik satu tombol untuk mengubah status menu habis / tersedia seketika</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400">Habis: <strong className="text-red-400">{totalSoldOut}</strong></span>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {filteredMenu.map(item => {
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {menuItems.map(item => {
                 const isAvailable = item.isAvailable !== false;
                 const isUpdating = updatingId === item.id;
 
                 return (
                   <div
                     key={item.id}
-                    className={`border rounded-2xl p-4 transition-all duration-200 shadow-md ${
-                      isAvailable
-                        ? 'bg-slate-850 border-slate-750 hover:border-slate-600'
-                        : 'bg-red-950/20 border-red-900/60 opacity-80'
+                    className={`bg-slate-800/90 border rounded-2xl p-3 shadow flex flex-col justify-between transition ${
+                      isAvailable ? 'border-slate-700' : 'border-red-900 bg-red-950/20'
                     }`}
                   >
-                    <div className="flex gap-3 items-center mb-3">
-                      <div className="relative w-16 h-16 rounded-xl overflow-hidden bg-slate-800 flex-shrink-0">
-                        <Image
-                          src={item.image || '/menu/ayam-kampung.jpg'}
-                          alt={item.name}
-                          fill
-                          className={`object-cover ${!isAvailable ? 'grayscale' : ''}`}
-                        />
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-900 flex-shrink-0">
+                        <img src={item.image} alt={item.name} className={`w-full h-full object-cover ${!isAvailable && 'grayscale'}`} />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <span className="text-[10px] text-amber-400 font-semibold block">{item.category}</span>
-                        <h3 className="font-bold text-sm text-white truncate">{item.name}</h3>
-                        <p className="text-xs font-black text-emerald-400 mt-0.5">{toIdr(item.price)}</p>
+                        <h4 className="text-xs font-bold text-white truncate">{item.name}</h4>
+                        <span className="text-[11px] text-slate-400">{toIdr(item.price)}</span>
                       </div>
                     </div>
 
-                    <div className="border-t border-slate-750 pt-3 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className={`w-2.5 h-2.5 rounded-full ${isAvailable ? 'bg-emerald-500' : 'bg-red-500'}`} />
-                        <span className={`text-xs font-bold ${isAvailable ? 'text-emerald-400' : 'text-red-400'}`}>
-                          {isAvailable ? 'Tersedia' : 'Habis (Sold Out)'}
-                        </span>
-                      </div>
+                    <div className="mt-3 pt-2.5 border-t border-slate-700/60 flex items-center justify-between">
+                      <span className={`text-[10px] font-black uppercase ${isAvailable ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {isAvailable ? '● Tersedia' : '✕ Habis'}
+                      </span>
 
                       <button
-                        onClick={() => handleToggleStock(item)}
                         disabled={isUpdating}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition shadow ${
+                        onClick={() => handleToggleStock(item)}
+                        className={`px-3 py-1 rounded-xl text-xs font-bold transition shadow ${
                           isAvailable
-                            ? 'bg-red-600/90 hover:bg-red-600 text-white'
+                            ? 'bg-red-600 hover:bg-red-500 text-white'
                             : 'bg-emerald-600 hover:bg-emerald-500 text-white'
                         }`}
                       >
-                        {isUpdating ? '...' : isAvailable ? 'Tandai Habis' : 'Jadikan Tersedia'}
+                        {isUpdating ? '...' : isAvailable ? 'Tandai Habis' : 'Tersedia'}
                       </button>
                     </div>
                   </div>
@@ -871,7 +1215,6 @@ export default function AdminDashboardPage() {
                 />
               </div>
 
-              {/* Upload Foto / URL Foto */}
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">Foto Menu</label>
                 <div className="flex gap-2 items-center">
@@ -948,9 +1291,9 @@ export default function AdminDashboardPage() {
             <h2 className="text-lg font-black text-white flex items-center gap-2 mb-1">
               <span>✏️</span> Edit Menu & Harga
             </h2>
-            <p className="text-xs text-slate-400 mb-4">Ubah harga, nama, atau foto lauk. Perubahan langsung aktif di HP tamu.</p>
+            <p className="text-xs text-slate-400 mb-4">Perubahan harga dan nama menu akan langsung tersinkron ke semua meja.</p>
 
-            <form onSubmit={handleSaveEditMenu} className="space-y-3.5">
+            <form onSubmit={handleUpdateMenu} className="space-y-3.5">
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">Nama Menu *</label>
                 <input
@@ -977,19 +1320,19 @@ export default function AdminDashboardPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">Harga Menu (Rp) *</label>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">Harga Satuan (Rp) *</label>
                   <input
                     type="number"
                     required
                     value={editingItem.price}
                     onChange={e => setEditingItem({ ...editingItem, price: Number(e.target.value) })}
-                    className="w-full bg-slate-800 border border-amber-500/80 rounded-xl px-3 py-2 text-xs text-amber-300 font-bold font-mono focus:outline-none focus:border-amber-400"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500 font-mono"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Deskripsi Menu</label>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Deskripsi</label>
                 <textarea
                   rows={2}
                   value={editingItem.description}
@@ -998,9 +1341,8 @@ export default function AdminDashboardPage() {
                 />
               </div>
 
-              {/* Upload Foto / URL Foto */}
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Foto Menu (Ganti Foto)</label>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Ubah Foto Menu</label>
                 <div className="flex gap-2 items-center">
                   <input
                     type="text"
@@ -1026,10 +1368,10 @@ export default function AdminDashboardPage() {
                 </div>
                 {editingItem.image && (
                   <div className="mt-2 flex items-center gap-2">
-                    <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-slate-700">
+                    <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-slate-700">
                       <img src={editingItem.image} alt="Preview" className="w-full h-full object-cover" />
                     </div>
-                    <span className="text-[11px] text-slate-400">Pratinjau foto terkini</span>
+                    <span className="text-[11px] text-emerald-400 font-medium">✓ Foto terpasang</span>
                   </div>
                 )}
               </div>
@@ -1038,7 +1380,7 @@ export default function AdminDashboardPage() {
                 <input
                   type="checkbox"
                   id="editPopular"
-                  checked={!!editingItem.isPopular}
+                  checked={editingItem.isPopular || false}
                   onChange={e => setEditingItem({ ...editingItem, isPopular: e.target.checked })}
                   className="w-4 h-4 rounded text-red-600 focus:ring-red-500 bg-slate-800 border-slate-700"
                 />
@@ -1067,36 +1409,138 @@ export default function AdminDashboardPage() {
         </div>
       )}
 
-      {/* MODAL PRINT LAPORAN CLOSING KASIR */}
+      {/* MODAL TAMBAH / EDIT ZONA ONGKIR */}
+      {isZoneModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-slate-850 border border-slate-700 text-white rounded-2xl max-w-md w-full p-6 shadow-2xl relative my-8">
+            <h2 className="text-lg font-black text-white flex items-center gap-2 mb-1">
+              <span>🛵</span> {editingZone ? 'Edit Zona Pengantaran' : 'Tambah Zona Pengantaran Baru'}
+            </h2>
+            <p className="text-xs text-slate-400 mb-4">
+              Atur nama wilayah, deskripsi cakupan, tarif ongkir, dan estimasi waktu kurir.
+            </p>
+
+            <form onSubmit={handleSaveZone} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Nama Zona / Area *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: Zona 1 - Radius Dekat (< 2 km)"
+                  value={zoneName}
+                  onChange={e => setZoneName(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">Tarif Ongkir (Rp) *</label>
+                  <input
+                    type="number"
+                    required
+                    placeholder="Contoh: 5000"
+                    value={zoneFee}
+                    onChange={e => setZoneFee(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">Estimasi Waktu</label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: 15 - 25 Menit"
+                    value={zoneTime}
+                    onChange={e => setZoneTime(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Deskripsi Cakupan Area</label>
+                <textarea
+                  rows={2}
+                  placeholder="Contoh: Sekitar perumahan griya asri, balai desa, dan kantor dinas..."
+                  value={zoneDesc}
+                  onChange={e => setZoneDesc(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="zoneActiveToggle"
+                  checked={zoneActive}
+                  onChange={e => setZoneActive(e.target.checked)}
+                  className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 bg-slate-800 border-slate-700"
+                />
+                <label htmlFor="zoneActiveToggle" className="text-xs text-slate-300 font-medium">
+                  Zona Aktif (Dapat dipilih pelanggan saat checkout)
+                </label>
+              </div>
+
+              <div className="flex gap-2 pt-4 border-t border-slate-750">
+                <button
+                  type="submit"
+                  className="flex-1 bg-purple-600 hover:bg-purple-500 text-white font-bold py-2.5 rounded-xl text-xs shadow transition"
+                >
+                  {editingZone ? 'Simpan Perubahan' : 'Tambah Zona'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsZoneModalOpen(false)}
+                  className="px-4 bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold py-2.5 rounded-xl text-xs transition"
+                >
+                  Batal
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PRINT RINGKASAN CLOSING HARIAN */}
       {isPrintModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white text-slate-900 rounded-2xl max-w-sm w-full p-6 shadow-2xl relative font-mono text-xs">
-            <div className="text-center border-b border-dashed border-slate-400 pb-3 mb-3">
-              <h2 className="font-black text-base uppercase tracking-wider text-red-700">{RESTAURANT_INFO.name}</h2>
-              <p className="text-[10px] text-slate-600 font-sans">{RESTAURANT_INFO.tagline}</p>
-              <p className="text-[10px] text-slate-500">WA: {RESTAURANT_INFO.phone}</p>
-              <div className="mt-2 text-[11px] font-bold bg-slate-100 py-1 rounded">
-                LAPORAN TUTUP KASIR (Z-REPORT)
-              </div>
+          <div className="bg-white text-slate-900 rounded-2xl max-w-sm w-full p-6 shadow-2xl font-mono text-xs">
+            <div className="text-center pb-3 border-b border-dashed border-slate-400 mb-3">
+              <h2 className="text-base font-black uppercase">{RESTAURANT_INFO.name}</h2>
+              <p className="text-[11px] text-slate-600">{RESTAURANT_INFO.tagline}</p>
               <p className="text-[10px] text-slate-500 mt-1">
-                Tanggal: {new Date().toLocaleDateString('id-ID')} &bull; Jam: {currentTime}
+                Tanggal: {report?.date} &bull; Jam: {currentTime}
               </p>
+              <p className="text-[10px] text-slate-500 font-bold mt-0.5">*** LAPORAN CLOSING KASIR ***</p>
             </div>
 
             <div className="space-y-1.5 border-b border-dashed border-slate-400 pb-3 mb-3">
               <div className="flex justify-between">
-                <span>Total Order:</span>
-                <span className="font-bold">{report?.totalOrders || 0} Transaksi</span>
+                <span>Total Transaksi:</span>
+                <span className="font-bold">{report?.totalOrders || 0} Order</span>
               </div>
               <div className="flex justify-between">
-                <span>Total Omzet Lunas:</span>
-                <span className="font-bold text-sm text-red-700">{toIdr(report?.totalOmzet || 0)}</span>
+                <span>Pesanan Selesai:</span>
+                <span>{report?.completedOrders || 0}</span>
               </div>
-              <div className="flex justify-between text-slate-600">
-                <span>- Uang Tunai (Cash):</span>
+              <div className="flex justify-between">
+                <span>Pesanan Aktif:</span>
+                <span>{report?.activeOrders || 0}</span>
+              </div>
+              <div className="flex justify-between font-bold text-sm pt-1 border-t border-slate-300">
+                <span>OMZET LUNAS:</span>
+                <span>{toIdr(report?.totalOmzet || 0)}</span>
+              </div>
+            </div>
+
+            <div className="space-y-1 border-b border-dashed border-slate-400 pb-3 mb-3 text-[11px]">
+              <div className="font-bold mb-1">METODE BAYAR:</div>
+              <div className="flex justify-between">
+                <span>- Tunai Kasir:</span>
                 <span>{toIdr(report?.payment.cashTotal || 0)}</span>
               </div>
-              <div className="flex justify-between text-slate-600">
+              <div className="flex justify-between">
                 <span>- QRIS Non-Tunai:</span>
                 <span>{toIdr(report?.payment.qrisTotal || 0)}</span>
               </div>
@@ -1120,7 +1564,7 @@ export default function AdminDashboardPage() {
 
             <div className="text-center pt-2 text-[10px] text-slate-600">
               <p>Kasir On Duty: _________________</p>
-              <p className="mt-3 italic">"Makan Enak, Mood Naik!"</p>
+              <p className="mt-3 italic">&ldquo;Makan Enak, Mood Naik!&rdquo;</p>
             </div>
 
             <div className="mt-5 flex gap-2">
@@ -1153,12 +1597,29 @@ export default function AdminDashboardPage() {
 
           <div className="py-2 border-b border-dashed border-black">
             <div className="flex justify-between font-bold text-sm">
-              <span>MEJA: {printingOrder.tableNumber}</span>
+              <span>
+                {printingOrder.orderType === 'delivery'
+                  ? '🛵 DELIVERY'
+                  : printingOrder.orderType === 'takeaway'
+                  ? '🛍️ BUNGKUS'
+                  : `MEJA: ${printingOrder.tableNumber}`}
+              </span>
               <span>{printingOrder.orderNumber}</span>
             </div>
             <p className="text-[11px]">Tamu: {printingOrder.customerName}</p>
+            {printingOrder.orderType === 'delivery' && (
+              <>
+                <p className="text-[10px]">Alamat: {printingOrder.deliveryAddress}</p>
+                {printingOrder.deliveryNotes && (
+                  <p className="text-[9px]">Patokan: {printingOrder.deliveryNotes}</p>
+                )}
+                {printingOrder.customerPhone && (
+                  <p className="text-[10px]">WA: {printingOrder.customerPhone}</p>
+                )}
+              </>
+            )}
             <p className="text-[10px]">
-              Status: {printingOrder.isPaid ? 'LUNAS (' + printingOrder.paymentMethod.toUpperCase() + ')' : 'BELUM BAYAR'}
+              Status: {printingOrder.isPaid ? 'LUNAS (' + printingOrder.paymentMethod.toUpperCase() + ')' : 'BELUM BAYAR (COD / KASIR)'}
             </p>
           </div>
 
@@ -1192,6 +1653,12 @@ export default function AdminDashboardPage() {
               <span>Pajak (PB1 10%):</span>
               <span>Rp {printingOrder.tax.toLocaleString('id-ID')}</span>
             </div>
+            {printingOrder.orderType === 'delivery' && (
+              <div className="flex justify-between font-bold">
+                <span>Ongkir:</span>
+                <span>Rp {(printingOrder.deliveryFee || 0).toLocaleString('id-ID')}</span>
+              </div>
+            )}
             <div className="flex justify-between font-bold text-xs pt-1 border-t border-black">
               <span>TOTAL:</span>
               <span>Rp {printingOrder.total.toLocaleString('id-ID')}</span>
