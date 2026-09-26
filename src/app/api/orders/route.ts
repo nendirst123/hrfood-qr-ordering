@@ -9,8 +9,9 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const table = searchParams.get('table');
     const orderType = searchParams.get('type') as OrderType | null;
+    const date = searchParams.get('date');
 
-    let orders = getAllOrders();
+    let orders = getAllOrders(date || undefined);
     if (table) {
       orders = orders.filter(o => o.tableNumber === table.padStart(2, '0'));
     }

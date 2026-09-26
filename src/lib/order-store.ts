@@ -30,27 +30,45 @@ function ensureDataDir() {
   }
 }
 
-export function getAllOrders(): Order[] {
+export function getAllOrders(filterDate?: string): Order[] {
   ensureDataDir();
+  let orders: Order[] = [];
+
   try {
     if (fs.existsSync(DATA_FILE)) {
       const raw = fs.readFileSync(DATA_FILE, 'utf-8');
-      const orders: Order[] = JSON.parse(raw || '[]');
+      const parsed: Order[] = JSON.parse(raw || '[]');
       
       // Preserve existing data: ensure backward-compatible defaults
-      const sanitized = orders.map(o => ({
+      orders = parsed.map(o => ({
         ...o,
         orderType: o.orderType || 'dine_in',
         deliveryFee: o.deliveryFee || 0,
       }));
 
-      globalThis.__CACHED_ORDERS__ = sanitized;
-      return sanitized.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      globalThis.__CACHED_ORDERS__ = orders;
     }
   } catch (err) {
     console.error('Failed reading orders file, using in-memory cache:', err);
+    orders = globalThis.__CACHED_ORDERS__ || [];
   }
-  return globalThis.__CACHED_ORDERS__ || [];
+
+  // Filter Tanggal jika diberikan
+  if (filterDate && filterDate !== 'all') {
+    let targetDateStr = filterDate;
+    const now = new Date();
+
+    if (filterDate === 'today') {
+      targetDateStr = now.toISOString().split('T')[0];
+    } else if (filterDate === 'yesterday') {
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      targetDateStr = yesterday.toISOString().split('T')[0];
+    }
+
+    orders = orders.filter(o => o.createdAt.startsWith(targetDateStr));
+  }
+
+  return orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
 export function getOrderById(id: string): Order | null {
@@ -154,4 +172,32 @@ export function updateOrderStatus(id: string, status: OrderStatus, isPaid?: bool
     console.warn('Failed updating orders to filesystem, kept in memory:', err);
   }
   return orders[index];
+}
+
+export function resetAllOrders(): { success: boolean; backupOrders: Order[]; count: number } {
+  ensureDataDir();
+  const previousOrders = getAllOrders();
+
+  // Buat cadangan lokal jika tidak di serverless
+  try {
+    const backupFileName = `backup_orders_${Date.now()}.json`;
+    const backupFilePath = path.join(DATA_DIR, backupFileName);
+    fs.writeFileSync(backupFilePath, JSON.stringify(previousOrders, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('Failed writing backup file to disk:', err);
+  }
+
+  // Kosongkan orders
+  globalThis.__CACHED_ORDERS__ = [];
+  try {
+    fs.writeFileSync(DATA_FILE, JSON.stringify([], null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('Failed resetting orders in filesystem, reset in memory:', err);
+  }
+
+  return {
+    success: true,
+    backupOrders: previousOrders,
+    count: previousOrders.length,
+  };
 }

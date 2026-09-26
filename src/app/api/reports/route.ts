@@ -1,18 +1,30 @@
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getAllOrders } from '@/lib/order-store';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const dateParam = searchParams.get('date');
+
   const orders = getAllOrders();
 
-  // Filter order hari ini (lokal)
-  const todayStr = new Date().toISOString().split('T')[0];
-  const todayOrders = orders.filter(o => o.createdAt.startsWith(todayStr));
+  let targetDateStr = new Date().toISOString().split('T')[0];
+  if (dateParam && dateParam !== 'today') {
+    if (dateParam === 'yesterday') {
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      targetDateStr = yesterday.toISOString().split('T')[0];
+    } else if (dateParam !== 'all') {
+      targetDateStr = dateParam;
+    }
+  }
+
+  // Filter order sesuai tanggal
+  const targetOrders = dateParam === 'all' ? orders : orders.filter(o => o.createdAt.startsWith(targetDateStr));
 
   // Hanya order yang valid/bukan cancelled
-  const validOrders = todayOrders.filter(o => o.status !== 'cancelled');
+  const validOrders = targetOrders.filter(o => o.status !== 'cancelled');
 
   const totalOmzet = validOrders.reduce((sum, o) => sum + (o.isPaid || o.status === 'completed' ? o.total : 0), 0);
   const potentialOmzet = validOrders.reduce((sum, o) => sum + o.total, 0);
@@ -74,7 +86,7 @@ export async function GET() {
   return NextResponse.json({
     success: true,
     data: {
-      date: todayStr,
+      date: targetDateStr,
       totalOmzet,
       potentialOmzet,
       totalOrders,
@@ -86,7 +98,7 @@ export async function GET() {
       },
       topItems,
       sambalStats: sambalMap,
-      recentOrders: todayOrders
+      recentOrders: targetOrders
     }
   });
 }

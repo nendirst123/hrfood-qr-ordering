@@ -23,7 +23,12 @@ import {
   MapPin,
   Phone,
   MessageCircle,
-  Navigation
+  Navigation,
+  Calendar,
+  RotateCcw,
+  Download,
+  AlertTriangle,
+  X
 } from 'lucide-react';
 import { Order, OrderStatus } from '@/types/order';
 
@@ -65,23 +70,30 @@ function playNewOrderChime() {
 export default function KitchenDashboardPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [filterStatus, setFilterStatus] = useState<string>('active');
+  const [dateFilter, setDateFilter] = useState<string>('today'); // 'today' | 'yesterday' | 'all' | 'YYYY-MM-DD'
+  const [customDate, setCustomDate] = useState<string>('');
   const [audioEnabled, setAudioEnabled] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(true);
   const [printingOrder, setPrintingOrder] = useState<Order | null>(null);
   const [viewMode, setViewMode] = useState<'cards' | 'compact'>('cards');
 
+  // Modal Reset State
+  const [isResetModalOpen, setIsResetModalOpen] = useState<boolean>(false);
+  const [isResetting, setIsResetting] = useState<boolean>(false);
+
   const prevOrderCountRef = useRef<number>(0);
 
-  // Fetch orders
+  // Fetch orders based on date
   const fetchOrders = async () => {
     try {
-      const res = await fetch('/api/orders');
+      const activeDate = dateFilter === 'custom' ? customDate : dateFilter;
+      const res = await fetch(`/api/orders?date=${activeDate}`);
       const data = await res.json();
       if (data.success && Array.isArray(data.data)) {
         const fetched: Order[] = data.data;
 
-        // Cek jika ada pesanan baru masuk
-        if (prevOrderCountRef.current > 0 && fetched.length > prevOrderCountRef.current) {
+        // Cek jika ada pesanan baru masuk pada filter hari ini
+        if ((dateFilter === 'today' || !dateFilter) && prevOrderCountRef.current > 0 && fetched.length > prevOrderCountRef.current) {
           if (audioEnabled) {
             playNewOrderChime();
           }
@@ -100,7 +112,7 @@ export default function KitchenDashboardPage() {
     fetchOrders();
     const interval = setInterval(fetchOrders, 3000);
     return () => clearInterval(interval);
-  }, [audioEnabled]);
+  }, [dateFilter, customDate, audioEnabled]);
 
   // Update Status
   const handleUpdateStatus = async (orderId: string, newStatus: OrderStatus, isPaid?: boolean) => {
@@ -122,6 +134,42 @@ export default function KitchenDashboardPage() {
     }
   };
 
+  // Unduh Backup JSON
+  const handleDownloadBackup = () => {
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(orders, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute('href', dataStr);
+    downloadAnchor.setAttribute('download', `backup_hrfood_orders_${new Date().toISOString().split('T')[0]}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
+
+  // Eksekusi Reset Pesanan (Mulai dari 0)
+  const handleConfirmReset = async () => {
+    setIsResetting(true);
+    try {
+      // Auto-download backup sebelum reset
+      handleDownloadBackup();
+
+      const res = await fetch('/api/orders/reset', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setOrders([]);
+        prevOrderCountRef.current = 0;
+        setIsResetModalOpen(false);
+        alert('Pesanan berhasil direset ke 0! Penomoran pesanan berikutnya akan kembali mulai dari ORD-001.');
+      } else {
+        alert('Gagal mereset pesanan: ' + data.error);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Terjadi kesalahan saat mereset.');
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
   // Cetak Kitchen Slip / Kasir Receipt
   const handlePrint = (order: Order) => {
     setPrintingOrder(order);
@@ -130,7 +178,7 @@ export default function KitchenDashboardPage() {
     }, 200);
   };
 
-  // Filter List
+  // Filter List Status
   const filteredOrders = orders.filter((order) => {
     const type = order.orderType || 'dine_in';
 
@@ -175,7 +223,7 @@ export default function KitchenDashboardPage() {
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
       {/* Top Bar Staff Dashboard */}
       <header className="bg-slate-900 border-b border-slate-800 px-3 sm:px-6 py-2.5 sm:py-3.5 sticky top-0 z-30 shadow-md">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
           {/* Logo & Info */}
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-white/95 p-1 flex items-center justify-center shadow-md shadow-red-950/60 flex-shrink-0">
@@ -199,6 +247,16 @@ export default function KitchenDashboardPage() {
 
           {/* Quick Action Navigation */}
           <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+            {/* Tombol Reset Pesanan (Mulai dari 0) */}
+            <button
+              onClick={() => setIsResetModalOpen(true)}
+              className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-950/70 hover:bg-rose-900 text-rose-300 border border-rose-800/80 shadow transition active:scale-95"
+              title="Reset Antrean Pesanan & Mulai dari 0"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-rose-400" />
+              <span className="hidden xs:inline">Reset Sesi</span>
+            </button>
+
             {/* Alarm Audio Toggle */}
             <button
               onClick={() => setAudioEnabled(!audioEnabled)}
@@ -209,7 +267,7 @@ export default function KitchenDashboardPage() {
               }`}
               title={audioEnabled ? 'Alarm Suara Aktif' : 'Alarm Senyap'}
             >
-              {audioEnabled ? <Volume2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" /> : <VolumeX className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+              {audioEnabled ? <Volume2 className="w-3.5 h-3.5 text-amber-400" /> : <VolumeX className="w-3.5 h-3.5" />}
               <span className="hidden sm:inline">{audioEnabled ? 'Alarm: On' : 'Alarm: Mute'}</span>
             </button>
 
@@ -237,7 +295,66 @@ export default function KitchenDashboardPage() {
         </div>
       </header>
 
-      {/* Filter Tabs Bar */}
+      {/* Baris Filter Tanggal (Per Hari) */}
+      <div className="bg-slate-900 border-b border-slate-800 px-3 sm:px-6 py-2 flex items-center justify-between gap-3 overflow-x-auto no-scrollbar">
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className="text-xs font-bold text-slate-400 flex items-center gap-1">
+            <Calendar className="w-3.5 h-3.5 text-amber-400" />
+            <span>Tampilkan Hari:</span>
+          </span>
+
+          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-bold">
+            <button
+              onClick={() => { setDateFilter('today'); setCustomDate(''); }}
+              className={`px-3 py-1 rounded-lg transition ${
+                dateFilter === 'today'
+                  ? 'bg-emerald-600 text-white shadow'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              🟢 Hari Ini
+            </button>
+
+            <button
+              onClick={() => { setDateFilter('yesterday'); setCustomDate(''); }}
+              className={`px-3 py-1 rounded-lg transition ${
+                dateFilter === 'yesterday'
+                  ? 'bg-amber-600 text-white shadow'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              🟡 Kemarin
+            </button>
+
+            <button
+              onClick={() => { setDateFilter('all'); setCustomDate(''); }}
+              className={`px-3 py-1 rounded-lg transition ${
+                dateFilter === 'all'
+                  ? 'bg-blue-600 text-white shadow'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              🌐 Semua
+            </button>
+          </div>
+        </div>
+
+        {/* Input Custom Date */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className="text-[11px] text-slate-400 hidden sm:inline">Atau pilih tanggal:</span>
+          <input
+            type="date"
+            value={customDate}
+            onChange={(e) => {
+              setCustomDate(e.target.value);
+              setDateFilter(e.target.value ? 'custom' : 'today');
+            }}
+            className="bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono"
+          />
+        </div>
+      </div>
+
+      {/* Filter Tabs Bar (Status) */}
       <div className="bg-slate-900/80 border-b border-slate-800 px-3 sm:px-6 py-2 flex items-center justify-between gap-2 overflow-hidden">
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar scroll-smooth py-0.5 max-w-full">
           <button
@@ -356,8 +473,12 @@ export default function KitchenDashboardPage() {
         ) : filteredOrders.length === 0 ? (
           <div className="py-20 text-center text-slate-500">
             <CheckCircle2 className="w-12 h-12 stroke-1 mx-auto mb-3 text-slate-700" />
-            <p className="text-sm sm:text-base font-bold text-slate-400">Tidak ada antrean pada kategori ini</p>
-            <p className="text-xs text-slate-600 mt-1">Pesanan masuk akan muncul secara realtime.</p>
+            <p className="text-sm sm:text-base font-bold text-slate-400">
+              Tidak ada antrean pesanan pada hari ini / kategori ini
+            </p>
+            <p className="text-xs text-slate-600 mt-1">
+              Pesanan baru akan muncul otomatis atau ganti filter tanggal di atas.
+            </p>
           </div>
         ) : viewMode === 'compact' ? (
           /* TAMPILAN RINGKAS */
@@ -365,12 +486,15 @@ export default function KitchenDashboardPage() {
             {filteredOrders.map((order) => {
               const orderType = order.orderType || 'dine_in';
               const elapsedMinutes = Math.max(0, Math.floor((Date.now() - new Date(order.createdAt).getTime()) / 60000));
+              const isOverdue = order.status === 'cooking' && elapsedMinutes >= 15;
 
               return (
                 <div
                   key={order.id}
                   className={`p-3 rounded-xl border transition-all ${
-                    orderType === 'delivery'
+                    isOverdue
+                      ? 'bg-slate-900 border-red-500 ring-2 ring-red-500 animate-pulse'
+                      : orderType === 'delivery'
                       ? 'bg-slate-900 border-purple-500/50 ring-1 ring-purple-500/30'
                       : !order.isPaid
                       ? 'bg-slate-900 border-amber-500/50 ring-1 ring-amber-500/30'
@@ -396,10 +520,19 @@ export default function KitchenDashboardPage() {
                       )}
                       <span className="text-[11px] font-mono text-slate-400">{order.orderNumber}</span>
                       <span className="text-xs text-slate-300 font-medium">({order.customerName})</span>
+
+                      {/* SLA Alert Badge */}
+                      {isOverdue && (
+                        <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-red-600 text-white flex items-center gap-1 shadow">
+                          <AlertTriangle className="w-3 h-3" /> PRIORITAS (&gt;15M)
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-300">
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                        isOverdue ? 'bg-red-600 text-white font-black' : 'bg-slate-800 text-slate-300'
+                      }`}>
                         ⏱️ {elapsedMinutes}m
                       </span>
                       {order.isPaid ? (
@@ -479,7 +612,7 @@ export default function KitchenDashboardPage() {
                           onClick={() => handleUpdateStatus(order.id, 'on_delivery')}
                           className="flex-1 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 shadow"
                         >
-                          <Bike className="w-3.5 h-3.5" /> Berikan ke Kurir (Diantar)
+                          <Bike className="w-3.5 h-3.5" /> Serahkan ke Kurir
                         </button>
                       ) : (
                         <button
@@ -521,12 +654,15 @@ export default function KitchenDashboardPage() {
                 minute: '2-digit',
               });
               const elapsedMinutes = Math.max(0, Math.floor((Date.now() - new Date(order.createdAt).getTime()) / 60000));
+              const isOverdue = order.status === 'cooking' && elapsedMinutes >= 15;
 
               return (
                 <div
                   key={order.id}
                   className={`rounded-2xl border flex flex-col justify-between overflow-hidden shadow-lg transition duration-200 ${
-                    orderType === 'delivery'
+                    isOverdue
+                      ? 'bg-slate-900 border-red-500 ring-2 ring-red-500 animate-pulse'
+                      : orderType === 'delivery'
                       ? 'bg-slate-900 border-purple-500/60 ring-2 ring-purple-500/30'
                       : !order.isPaid
                       ? 'bg-slate-900 border-amber-500/60 ring-2 ring-amber-500/30'
@@ -560,11 +696,21 @@ export default function KitchenDashboardPage() {
                       </div>
 
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] font-bold text-slate-400 bg-slate-800 px-2 py-0.5 rounded-md">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                          isOverdue ? 'bg-red-600 text-white font-black animate-pulse' : 'bg-slate-800 text-slate-400'
+                        }`}>
                           ⏱️ {elapsedMinutes}m
                         </span>
                       </div>
                     </div>
+
+                    {/* SLA Alert Label */}
+                    {isOverdue && (
+                      <div className="mt-2 bg-red-600/90 text-white text-[11px] font-black px-2 py-1 rounded-lg flex items-center gap-1 shadow">
+                        <AlertTriangle className="w-3.5 h-3.5" />
+                        <span>MASAK SUDAH LEBIH 15 MENIT (PRIORITAS)</span>
+                      </div>
+                    )}
 
                     <div className="mt-2 flex items-center justify-between text-xs">
                       <span className="text-slate-200 font-semibold truncate max-w-[180px]">
@@ -573,7 +719,7 @@ export default function KitchenDashboardPage() {
                       <span className="text-[10px] text-slate-400">{timeFormatted}</span>
                     </div>
 
-                    {/* Informasi Pengantaran / Takeaway */}
+                    {/* Informasi Pengantaran */}
                     {orderType === 'delivery' && (
                       <div className="mt-2.5 p-2 rounded-xl bg-purple-950/60 border border-purple-800/60 text-xs space-y-1">
                         <div className="flex items-start gap-1.5 text-purple-200">
@@ -596,7 +742,7 @@ export default function KitchenDashboardPage() {
                               rel="noopener noreferrer"
                               className="text-[10px] font-bold text-emerald-400 hover:underline flex items-center gap-0.5"
                             >
-                              <MessageCircle className="w-3 h-3" /> Chat Customer
+                              <MessageCircle className="w-3 h-3" /> Chat
                             </a>
                           </div>
                         )}
@@ -662,7 +808,6 @@ export default function KitchenDashboardPage() {
                         <Printer className="w-4 h-4" />
                       </button>
 
-                      {/* Action by state */}
                       {!order.isPaid ? (
                         <button
                           onClick={() => handleUpdateStatus(order.id, 'cooking', true)}
@@ -714,7 +859,60 @@ export default function KitchenDashboardPage() {
         )}
       </main>
 
-      {/* Printable Receipt (Disembunyikan di layar, muncul saat window.print()) */}
+      {/* MODAL RESET PESANAN (MULAI DARI 0) */}
+      {isResetModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-850 border border-slate-700 text-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-700/80 pb-3">
+              <div className="flex items-center gap-2 text-rose-400">
+                <AlertTriangle className="w-6 h-6" />
+                <h3 className="text-base font-black">Reset Sesi / Mulai dari Nol</h3>
+              </div>
+              <button
+                onClick={() => setIsResetModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2 text-xs text-slate-300 leading-relaxed">
+              <p>
+                Aksi ini akan <strong>mengosongkan seluruh antrean pesanan</strong> di KDS dan kasir. Penomoran pesanan baru berikutnya akan otomatis <strong>kembali mulai dari ORD-001</strong>.
+              </p>
+              <div className="bg-slate-900 border border-slate-800 p-3 rounded-xl space-y-1">
+                <p className="text-slate-400">Jumlah Pesanan Saat Ini: <strong className="text-white">{orders.length} Pesanan</strong></p>
+                <p className="text-emerald-400 font-semibold">
+                  ✓ Sistem akan otomatis mengunduh file cadangan JSON sebelum data dibersihkan.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2 pt-2 border-t border-slate-750">
+              <button
+                type="button"
+                onClick={handleDownloadBackup}
+                className="w-full py-2.5 bg-slate-800 hover:bg-slate-750 border border-slate-700 text-slate-200 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2"
+              >
+                <Download className="w-4 h-4 text-emerald-400" />
+                <span>Unduh Cadangan Manual Sekarang (.JSON)</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={isResetting}
+                onClick={handleConfirmReset}
+                className="w-full py-3 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-xl text-xs font-black shadow-lg shadow-red-950 transition flex items-center justify-center gap-2"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span>{isResetting ? 'Mereset Data...' : 'Konfirmasi: Kosongkan & Mulai dari ORD-001'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Printable Receipt */}
       {printingOrder && (
         <div id="printable-receipt" className="hidden print:block text-black bg-white font-mono text-xs p-4">
           <div className="text-center pb-2 border-b border-dashed border-black">

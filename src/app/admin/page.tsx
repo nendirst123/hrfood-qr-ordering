@@ -45,6 +45,12 @@ export default function AdminDashboardPage() {
   const [zoneTime, setZoneTime] = useState('');
   const [zoneActive, setZoneActive] = useState(true);
 
+  // Date Filter & Reset State
+  const [reportDate, setReportDate] = useState<string>('today');
+  const [customReportDate, setCustomReportDate] = useState<string>('');
+  const [isResetModalOpen, setIsResetModalOpen] = useState<boolean>(false);
+  const [isResetting, setIsResetting] = useState<boolean>(false);
+
   // Modal State untuk Tambah & Edit Menu
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -69,10 +75,11 @@ export default function AdminDashboardPage() {
     return () => clearInterval(timer);
   }, []);
 
-  const fetchData = async () => {
+  const fetchData = async (overrideDate?: string) => {
     try {
+      const activeDate = overrideDate !== undefined ? overrideDate : (reportDate === 'custom' ? customReportDate : reportDate);
       const [resReport, resMenu, resDelivery] = await Promise.all([
-        fetch('/api/reports'),
+        fetch(`/api/reports?date=${activeDate}`),
         fetch('/api/menu'),
         fetch('/api/delivery'),
       ]);
@@ -92,9 +99,98 @@ export default function AdminDashboardPage() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 8000);
+    const interval = setInterval(() => fetchData(), 8000);
     return () => clearInterval(interval);
-  }, []);
+  }, [reportDate, customReportDate]);
+
+  // Ekspor Transaksi ke CSV (Excel Compatible)
+  const handleExportCSV = () => {
+    if (!report?.recentOrders || report.recentOrders.length === 0) {
+      alert('Tidak ada data transaksi untuk diekspor pada tanggal yang dipilih.');
+      return;
+    }
+
+    const headers = [
+      'No',
+      'Order ID',
+      'Waktu Transaksi',
+      'Tipe Pesanan',
+      'Meja / Tujuan',
+      'Nama Pemesan',
+      'WhatsApp',
+      'Alamat Pengantaran',
+      'Rincian Menu',
+      'Subtotal',
+      'Pajak PB1 (10%)',
+      'Ongkir',
+      'Total Tagihan',
+      'Metode Bayar',
+      'Status Pembayaran',
+      'Status Pesanan'
+    ];
+
+    const rows = report.recentOrders.map((o, idx) => [
+      idx + 1,
+      o.orderNumber,
+      `"${new Date(o.createdAt).toLocaleString('id-ID')}"`,
+      o.orderType === 'delivery' ? 'Delivery' : o.orderType === 'takeaway' ? 'Takeaway' : 'Dine-In',
+      o.orderType === 'delivery' ? 'Pesan Antar' : `Meja ${o.tableNumber}`,
+      `"${(o.customerName || '').replace(/"/g, '""')}"`,
+      `"${(o.customerPhone || '').replace(/"/g, '""')}"`,
+      `"${(o.deliveryAddress || '').replace(/"/g, '""')}"`,
+      `"${o.items.map(it => `${it.quantity}x ${it.name}`).join('; ')}"`,
+      o.subtotal,
+      o.tax,
+      o.deliveryFee || 0,
+      o.total,
+      o.paymentMethod.toUpperCase(),
+      o.isPaid ? 'LUNAS' : 'BELUM BAYAR',
+      o.status
+    ]);
+
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `laporan_penjualan_hrfood_${reportDate}_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
+  // Unduh Backup JSON Pesanan
+  const handleDownloadBackup = () => {
+    if (!report?.recentOrders) return;
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(report.recentOrders, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute('href', dataStr);
+    downloadAnchor.setAttribute('download', `backup_hrfood_orders_${Date.now()}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
+
+  // Konfirmasi Reset Pesanan ke 0
+  const handleConfirmReset = async () => {
+    setIsResetting(true);
+    try {
+      handleDownloadBackup();
+      const res = await fetch('/api/orders/reset', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        fetchData();
+        setIsResetModalOpen(false);
+        alert('Pesanan berhasil direset ke 0! Penomoran pesanan baru berikutnya akan kembali mulai dari ORD-001.');
+      } else {
+        alert('Gagal mereset: ' + data.error);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Terjadi kesalahan jaringan.');
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   // Upload Gambar Menu
   const handleFileUpload = async (file: File, isEditing = false) => {
@@ -617,7 +713,73 @@ export default function AdminDashboardPage() {
 
         {/* TAB 1: REKAP OMZET & KASIR */}
         {activeTab === 'analytics' && (
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
+            {/* Filter Hari & Aksi Cepat (CSV Export & Reset Sesi) */}
+            <div className="bg-slate-850 border border-slate-800 rounded-2xl p-3 sm:p-4 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                  <span>📅</span> Filter Laporan:
+                </span>
+
+                <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs font-bold">
+                  <button
+                    onClick={() => { setReportDate('today'); setCustomReportDate(''); }}
+                    className={`px-3 py-1 rounded-lg transition ${
+                      reportDate === 'today' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    🟢 Hari Ini
+                  </button>
+
+                  <button
+                    onClick={() => { setReportDate('yesterday'); setCustomReportDate(''); }}
+                    className={`px-3 py-1 rounded-lg transition ${
+                      reportDate === 'yesterday' ? 'bg-amber-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    🟡 Kemarin
+                  </button>
+
+                  <button
+                    onClick={() => { setReportDate('all'); setCustomReportDate(''); }}
+                    className={`px-3 py-1 rounded-lg transition ${
+                      reportDate === 'all' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    🌐 Semua
+                  </button>
+                </div>
+
+                <input
+                  type="date"
+                  value={customReportDate}
+                  onChange={(e) => {
+                    setCustomReportDate(e.target.value);
+                    setReportDate(e.target.value ? 'custom' : 'today');
+                  }}
+                  className="bg-slate-900 border border-slate-800 rounded-xl px-2.5 py-1 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono"
+                  title="Pilih tanggal laporan tertentu"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleExportCSV}
+                  className="flex-1 md:flex-none px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow transition flex items-center justify-center gap-1.5 active:scale-95"
+                  title="Unduh file Excel / CSV data transaksi"
+                >
+                  <span>📥</span> Unduh Laporan (CSV)
+                </button>
+
+                <button
+                  onClick={() => setIsResetModalOpen(true)}
+                  className="flex-1 md:flex-none px-3.5 py-1.5 bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-800/80 font-bold text-xs rounded-xl shadow transition flex items-center justify-center gap-1.5 active:scale-95"
+                  title="Reset Semua Pesanan & Mulai dari ORD-001"
+                >
+                  <span>🔄</span> Reset Sesi (Mulai dari 0)
+                </button>
+              </div>
+            </div>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2 space-y-6">
                 <div className="bg-slate-850 border border-slate-800 rounded-2xl p-6 shadow-xl">
@@ -1579,6 +1741,56 @@ export default function AdminDashboardPage() {
                 className="px-4 bg-slate-200 hover:bg-slate-300 text-slate-700 font-sans font-bold py-2 rounded-xl text-xs transition"
               >
                 Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* MODAL RESET PESANAN ADMIN (MULAI DARI 0) */}
+      {isResetModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-850 border border-slate-700 text-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-700/80 pb-3">
+              <div className="flex items-center gap-2 text-rose-400">
+                <span className="text-xl">⚠️</span>
+                <h3 className="text-base font-black">Reset Sesi / Mulai dari Nol</h3>
+              </div>
+              <button
+                onClick={() => setIsResetModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-2 text-xs text-slate-300 leading-relaxed">
+              <p>
+                Aksi ini akan <strong>mengosongkan seluruh antrean transaksi</strong>. Penomoran pesanan baru berikutnya akan otomatis <strong>kembali mulai dari ORD-001</strong>.
+              </p>
+              <div className="bg-slate-900 border border-slate-800 p-3 rounded-xl space-y-1">
+                <p className="text-slate-400">Transaksi Terdaftar: <strong className="text-white">{report?.recentOrders?.length || 0} Order</strong></p>
+                <p className="text-emerald-400 font-semibold">
+                  ✓ File cadangan JSON akan diunduh otomatis sebelum database dibersihkan.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2 pt-2 border-t border-slate-750">
+              <button
+                type="button"
+                onClick={handleDownloadBackup}
+                className="w-full py-2.5 bg-slate-800 hover:bg-slate-750 border border-slate-700 text-slate-200 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2"
+              >
+                <span>💾</span> Unduh Cadangan JSON Sekarang
+              </button>
+
+              <button
+                type="button"
+                disabled={isResetting}
+                onClick={handleConfirmReset}
+                className="w-full py-3 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-xl text-xs font-black shadow-lg shadow-red-950 transition flex items-center justify-center gap-2"
+              >
+                <span>🔄</span> {isResetting ? 'Mereset Data...' : 'Konfirmasi: Kosongkan & Mulai dari ORD-001'}
               </button>
             </div>
           </div>
