@@ -81,3 +81,11 @@ export interface Order {
   createdAt: string; // ISO String
   updatedAt: string;
 }
+
+export interface StoreConfig {
+  isOpen: boolean;
+  autoSchedule: boolean;
+  openTime: string; // "10:00"
+  closeTime: string; // "22:00"
+  closedMessage: string;
+}

@@ -4,7 +4,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { RESTAURANT_INFO, CATEGORIES } from '@/data/menu';
-import { MenuItem, Order, DeliverySettings, DeliveryZone } from '@/types/order';
+import { MenuItem, Order, DeliverySettings, DeliveryZone, StoreConfig } from '@/types/order';
+import { playNewOrderChime } from '@/lib/audio-chime';
+import { generateCustomerWhatsAppUrl, generateCourierWhatsAppUrl } from '@/lib/whatsapp-helper';
+import ThermalReceiptModal from '@/components/ThermalReceiptModal';
+import { Bell, Volume2, VolumeX, Store, Clock, Power } from 'lucide-react';
 
 interface ReportData {
   date: string;
@@ -33,6 +37,20 @@ export default function AdminDashboardPage() {
   const [currentTime, setCurrentTime] = useState<string>('');
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [printingOrder, setPrintingOrder] = useState<Order | null>(null);
+
+  // Audio Bell State
+  const [audioEnabled, setAudioEnabled] = useState(true);
+  const prevOrderCountRef = useRef(0);
+
+  // Store Configuration State (Buka / Tutup & Jam Operasional)
+  const [storeConfig, setStoreConfig] = useState<StoreConfig | null>(null);
+  const [isStoreModalOpen, setIsStoreModalOpen] = useState(false);
+  const [isSavingStore, setIsSavingStore] = useState(false);
+  const [formIsOpen, setFormIsOpen] = useState(true);
+  const [formAutoSchedule, setFormAutoSchedule] = useState(false);
+  const [formOpenTime, setFormOpenTime] = useState('10:00');
+  const [formCloseTime, setFormCloseTime] = useState('22:00');
+  const [formClosedMessage, setFormClosedMessage] = useState('');
 
   // Delivery Settings State
   const [deliverySettings, setDeliverySettings] = useState<DeliverySettings | null>(null);
@@ -78,18 +96,36 @@ export default function AdminDashboardPage() {
   const fetchData = async (overrideDate?: string) => {
     try {
       const activeDate = overrideDate !== undefined ? overrideDate : (reportDate === 'custom' ? customReportDate : reportDate);
-      const [resReport, resMenu, resDelivery] = await Promise.all([
+      const [resReport, resMenu, resDelivery, resStore] = await Promise.all([
         fetch(`/api/reports?date=${activeDate}`),
         fetch('/api/menu'),
         fetch('/api/delivery'),
+        fetch('/api/store-config'),
       ]);
       const dataReport = await resReport.json();
       const dataMenu = await resMenu.json();
       const dataDelivery = await resDelivery.json();
+      const dataStore = await resStore.json();
 
-      if (dataReport.success) setReport(dataReport.data);
+      if (dataReport.success) {
+        setReport(dataReport.data);
+        if (prevOrderCountRef.current > 0 && dataReport.data.totalOrders > prevOrderCountRef.current) {
+          if (audioEnabled) {
+            playNewOrderChime();
+          }
+        }
+        prevOrderCountRef.current = dataReport.data.totalOrders;
+      }
       if (dataMenu.success) setMenuItems(dataMenu.items);
       if (dataDelivery.success) setDeliverySettings(dataDelivery.data);
+      if (dataStore.success && dataStore.data) {
+        setStoreConfig(dataStore.data);
+        setFormIsOpen(dataStore.data.isOpen);
+        setFormAutoSchedule(!!dataStore.data.autoSchedule);
+        setFormOpenTime(dataStore.data.openTime || '10:00');
+        setFormCloseTime(dataStore.data.closeTime || '22:00');
+        setFormClosedMessage(dataStore.data.closedMessage || '');
+      }
     } catch (err) {
       console.error('Failed fetching admin data:', err);
     } finally {
@@ -346,11 +382,58 @@ export default function AdminDashboardPage() {
     }
   };
 
+  // Buka Modal Cetak Struk Thermal
   const handlePrintReceipt = (order: Order) => {
     setPrintingOrder(order);
-    setTimeout(() => {
-      window.print();
-    }, 200);
+  };
+
+  // STORE CONFIGURATION HANDLERS
+  const handleToggleStoreStatus = async () => {
+    if (!storeConfig) return;
+    const newIsOpen = !storeConfig.isOpen;
+    setStoreConfig(prev => prev ? { ...prev, isOpen: newIsOpen } : null);
+    setFormIsOpen(newIsOpen);
+    try {
+      await fetch('/api/store-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isOpen: newIsOpen }),
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleSaveStoreConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingStore(true);
+    try {
+      const payload: StoreConfig = {
+        isOpen: formIsOpen,
+        autoSchedule: formAutoSchedule,
+        openTime: formOpenTime,
+        closeTime: formCloseTime,
+        closedMessage: formClosedMessage,
+      };
+      const res = await fetch('/api/store-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setStoreConfig(data.data);
+        setIsStoreModalOpen(false);
+        alert('Pengaturan jam operasional dan status toko berhasil disimpan!');
+      } else {
+        alert('Gagal menyimpan: ' + data.error);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Terjadi kesalahan koneksi.');
+    } finally {
+      setIsSavingStore(false);
+    }
   };
 
   // DELIVERY SETTINGS MANAGEMENT
@@ -541,7 +624,48 @@ export default function AdminDashboardPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0 flex-wrap justify-end">
+            {/* Saklar Status Toko */}
+            <button
+              onClick={() => setIsStoreModalOpen(true)}
+              className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold border transition shadow-sm ${
+                storeConfig?.isOpen
+                  ? 'bg-emerald-950/70 border-emerald-700 text-emerald-300 hover:bg-emerald-900/80'
+                  : 'bg-rose-950/70 border-rose-700 text-rose-300 hover:bg-rose-900/80'
+              }`}
+              title="Atur Jam Operasional & Status Buka/Tutup Resto"
+            >
+              <Store className="w-3.5 h-3.5" />
+              <span>{storeConfig?.isOpen ? '🟢 Toko BUKA' : '🔴 Toko TUTUP'}</span>
+            </button>
+
+            {/* Alarm Audio Toggle */}
+            <button
+              onClick={() => setAudioEnabled(!audioEnabled)}
+              className={`flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold border transition ${
+                audioEnabled
+                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20'
+                  : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
+              }`}
+              title={audioEnabled ? 'Alarm Suara Kasir Aktif' : 'Alarm Senyap'}
+            >
+              {audioEnabled ? <Volume2 className="w-3.5 h-3.5 text-amber-400" /> : <VolumeX className="w-3.5 h-3.5" />}
+              <span className="hidden md:inline">{audioEnabled ? 'Alarm: On' : 'Mute'}</span>
+            </button>
+
+            {/* Tes Bell */}
+            <button
+              onClick={() => {
+                setAudioEnabled(true);
+                playNewOrderChime();
+              }}
+              className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-750 text-amber-300 border border-slate-700 transition active:scale-95 shadow-sm"
+              title="Uji Coba Lonceng Kasir (Audio Bell)"
+            >
+              <Bell className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline">Tes Bell</span>
+            </button>
+
             <Link
               href="/kitchen"
               className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 shadow transition"
@@ -933,28 +1057,37 @@ export default function AdminDashboardPage() {
                             <div className="flex items-center gap-1.5 justify-end flex-wrap">
                               <span className="font-black text-emerald-400 hidden sm:inline mr-2">{toIdr(order.total)}</span>
 
-                              {/* Tombol Chat WA Customer / Driver */}
+                              {/* Tombol Chat WA Customer & Kurir */}
                               {order.customerPhone && (
                                 <a
-                                  href={`https://wa.me/${order.customerPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
-                                    `Halo Kak ${order.customerName}, kami dari HR Food mengonfirmasi pesanan ${order.orderNumber}:\n` +
-                                    order.items.map(it => `- ${it.quantity}x ${it.name}`).join('\n') +
-                                    `\nTotal: ${toIdr(order.total)}\nStatus: ${order.isPaid ? 'LUNAS' : 'Belum Lunas'}`
-                                  )}`}
+                                  href={generateCustomerWhatsAppUrl(order)}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="p-1.5 px-2 rounded-lg bg-emerald-600/30 text-emerald-400 hover:bg-emerald-600/50 text-xs font-semibold flex items-center gap-1"
-                                  title="Chat WhatsApp Customer"
+                                  title="Chat WhatsApp Pelanggan (Format Pesanan)"
                                 >
                                   <span>💬</span>
-                                  <span className="hidden xs:inline">WA</span>
+                                  <span className="hidden xs:inline">WA Tamu</span>
+                                </a>
+                              )}
+
+                              {orderType === 'delivery' && (
+                                <a
+                                  href={generateCourierWhatsAppUrl(order)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="p-1.5 px-2 rounded-lg bg-indigo-600/40 text-indigo-300 hover:bg-indigo-600/60 text-xs font-semibold flex items-center gap-1"
+                                  title="Kirim Tugas ke Kurir via WhatsApp"
+                                >
+                                  <span>🛵</span>
+                                  <span className="hidden xs:inline">Kurir</span>
                                 </a>
                               )}
 
                               <button
                                 onClick={() => handlePrintReceipt(order)}
                                 className="p-1.5 px-2 rounded-lg bg-slate-700 hover:bg-slate-650 text-slate-300 hover:text-white transition text-xs font-semibold flex items-center gap-1"
-                                title="Cetak Struk Kasir"
+                                title="Cetak Struk Thermal (58mm/80mm & Tiket Dapur)"
                               >
                                 <span>🖨️</span>
                                 <span className="hidden xs:inline">Struk</span>
@@ -1667,7 +1800,7 @@ export default function AdminDashboardPage() {
       {/* MODAL PRINT RINGKASAN CLOSING HARIAN */}
       {isPrintModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white text-slate-900 rounded-2xl max-w-sm w-full p-6 shadow-2xl font-mono text-xs">
+          <div id="printable-receipt" className="print-80mm bg-white text-slate-900 rounded-2xl max-w-sm w-full p-6 shadow-2xl font-mono text-xs">
             <div className="text-center pb-3 border-b border-dashed border-slate-400 mb-3">
               <h2 className="text-base font-black uppercase">{RESTAURANT_INFO.name}</h2>
               <p className="text-[11px] text-slate-600">{RESTAURANT_INFO.tagline}</p>
@@ -1797,89 +1930,119 @@ export default function AdminDashboardPage() {
         </div>
       )}
 
-      {/* PRINTABLE RECEIPT KASIR PER TRANSAKSI */}
-      {printingOrder && (
-        <div id="printable-cashier-receipt" className="hidden print:block text-black bg-white font-mono text-xs p-2">
-          <div className="text-center pb-2 border-b border-dashed border-black">
-            <h2 className="text-sm font-bold uppercase">{RESTAURANT_INFO.name}</h2>
-            <p className="text-[10px]">{RESTAURANT_INFO.tagline}</p>
-            <p className="text-[10px]">WA / Kasir: {RESTAURANT_INFO.phone}</p>
-            <p className="text-[9px]">{new Date(printingOrder.createdAt).toLocaleString('id-ID')}</p>
-          </div>
+      {/* THERMAL RECEIPT MODAL (58mm / 80mm & Tiket Dapur / Struk Kasir) */}
+      <ThermalReceiptModal
+        order={printingOrder}
+        onClose={() => setPrintingOrder(null)}
+      />
 
-          <div className="py-2 border-b border-dashed border-black">
-            <div className="flex justify-between font-bold text-sm">
-              <span>
-                {printingOrder.orderType === 'delivery'
-                  ? '🛵 DELIVERY'
-                  : printingOrder.orderType === 'takeaway'
-                  ? '🛍️ BUNGKUS'
-                  : `MEJA: ${printingOrder.tableNumber}`}
-              </span>
-              <span>{printingOrder.orderNumber}</span>
+      {/* MODAL PENGATURAN STATUS TOKO & JAM OPERASIONAL */}
+      {isStoreModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-slate-850 border border-slate-700 text-white rounded-2xl max-w-md w-full p-6 shadow-2xl relative my-8">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-750 mb-4">
+              <div className="flex items-center gap-2">
+                <Store className="w-5 h-5 text-amber-400" />
+                <h3 className="text-base font-bold text-white">Status Resto & Jam Operasional</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsStoreModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg text-sm"
+              >
+                ✕
+              </button>
             </div>
-            <p className="text-[11px]">Tamu: {printingOrder.customerName}</p>
-            {printingOrder.orderType === 'delivery' && (
-              <>
-                <p className="text-[10px]">Alamat: {printingOrder.deliveryAddress}</p>
-                {printingOrder.deliveryNotes && (
-                  <p className="text-[9px]">Patokan: {printingOrder.deliveryNotes}</p>
-                )}
-                {printingOrder.customerPhone && (
-                  <p className="text-[10px]">WA: {printingOrder.customerPhone}</p>
-                )}
-              </>
-            )}
-            <p className="text-[10px]">
-              Status: {printingOrder.isPaid ? 'LUNAS (' + printingOrder.paymentMethod.toUpperCase() + ')' : 'BELUM BAYAR (COD / KASIR)'}
-            </p>
-          </div>
 
-          <div className="py-2 border-b border-dashed border-black space-y-2">
-            {printingOrder.items.map((item, idx) => (
-              <div key={idx}>
-                <div className="flex justify-between font-bold">
-                  <span>{item.quantity}x {item.name}</span>
-                  <span>{(item.unitPrice * item.quantity).toLocaleString('id-ID')}</span>
+            <form onSubmit={handleSaveStoreConfig} className="space-y-4 text-xs">
+              {/* Saklar Buka / Tutup Manual Cepat */}
+              <div className="p-3.5 rounded-xl bg-slate-800 border border-slate-700 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="font-bold text-white text-sm block">Status Buka Resto Saat Ini</label>
+                    <p className="text-[11px] text-slate-400">Tentukan apakah pelanggan dapat membuat pesanan</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setFormIsOpen(!formIsOpen)}
+                    className={`px-3 py-1.5 rounded-xl font-black text-xs transition flex items-center gap-1.5 shadow ${
+                      formIsOpen
+                        ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                        : 'bg-rose-600 hover:bg-rose-500 text-white'
+                    }`}
+                  >
+                    <Power className="w-3.5 h-3.5" />
+                    <span>{formIsOpen ? '🟢 BUKA' : '🔴 TUTUP'}</span>
+                  </button>
                 </div>
-                {item.selectedOptions.length > 0 && (
-                  <p className="text-[9px] pl-3">
-                    {item.selectedOptions.map((o) => o.choiceLabel).join(', ')}
-                  </p>
-                )}
-                {item.notes && (
-                  <p className="text-[10px] pl-3 font-bold">
-                    Catatan: {item.notes}
-                  </p>
-                )}
               </div>
-            ))}
-          </div>
 
-          <div className="py-2 text-[10px] space-y-0.5">
-            <div className="flex justify-between">
-              <span>Subtotal:</span>
-              <span>Rp {printingOrder.subtotal.toLocaleString('id-ID')}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Pajak (PB1 10%):</span>
-              <span>Rp {printingOrder.tax.toLocaleString('id-ID')}</span>
-            </div>
-            {printingOrder.orderType === 'delivery' && (
-              <div className="flex justify-between font-bold">
-                <span>Ongkir:</span>
-                <span>Rp {(printingOrder.deliveryFee || 0).toLocaleString('id-ID')}</span>
+              {/* Opsi Jadwal Otomatis */}
+              <div className="p-3.5 rounded-xl bg-slate-800 border border-slate-700 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="font-bold text-white block">Auto Buka/Tutup Terjadwal</label>
+                    <p className="text-[11px] text-slate-400">Otomatis tentukan status buka berdasarkan jam WIB</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={formAutoSchedule}
+                    onChange={e => setFormAutoSchedule(e.target.checked)}
+                    className="w-4 h-4 rounded text-red-600 bg-slate-700 border-slate-600 focus:ring-red-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">Jam Buka (WIB)</label>
+                    <input
+                      type="time"
+                      value={formOpenTime}
+                      onChange={e => setFormOpenTime(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">Jam Tutup (WIB)</label>
+                    <input
+                      type="time"
+                      value={formCloseTime}
+                      onChange={e => setFormCloseTime(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500 font-mono"
+                    />
+                  </div>
+                </div>
               </div>
-            )}
-            <div className="flex justify-between font-bold text-xs pt-1 border-t border-black">
-              <span>TOTAL:</span>
-              <span>Rp {printingOrder.total.toLocaleString('id-ID')}</span>
-            </div>
-          </div>
 
-          <div className="text-center pt-3 border-t border-dashed border-black text-[9px]">
-            <p>Terima kasih atas kunjungan Anda!</p>
-            <p>&ldquo;Makan Enak, Mood Naik!&rdquo;</p>
+              {/* Pesan saat Resto Tutup */}
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Pesan Pengumuman saat Tutup</label>
+                <textarea
+                  rows={2}
+                  value={formClosedMessage}
+                  onChange={e => setFormClosedMessage(e.target.value)}
+                  placeholder="Maaf, resto kami sedang tutup..."
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="pt-2 flex gap-2">
+                <button
+                  type="submit"
+                  disabled={isSavingStore}
+                  className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white font-bold py-2.5 rounded-xl text-xs shadow transition"
+                >
+                  {isSavingStore ? 'Menyimpan...' : 'Simpan Pengaturan Resto'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsStoreModalOpen(false)}
+                  className="px-4 bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold py-2.5 rounded-xl text-xs transition"
+                >
+                  Batal
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

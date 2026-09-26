@@ -32,7 +32,8 @@ import {
   PaymentMethod, 
   OrderType, 
   DeliverySettings, 
-  DeliveryZone 
+  DeliveryZone,
+  StoreConfig
 } from '@/types/order';
 
 function OrderingAppContent() {
@@ -45,6 +46,9 @@ function OrderingAppContent() {
   const [orderType, setOrderType] = useState<OrderType>(
     typeParam === 'delivery' || typeParam === 'takeaway' ? typeParam : 'dine_in'
   );
+
+  // State Store Status (Buka / Tutup)
+  const [storeConfig, setStoreConfig] = useState<StoreConfig | null>(null);
 
   // State Meja (Dine-in)
   const [tableNumber, setTableNumber] = useState<string>(tableParam || '01');
@@ -106,6 +110,24 @@ function OrderingAppContent() {
       }
     };
     fetchDelivery();
+  }, []);
+
+  // Fetch Store Status (Buka / Tutup & Jam Operasional)
+  useEffect(() => {
+    const fetchStore = async () => {
+      try {
+        const res = await fetch('/api/store-config');
+        const data = await res.json();
+        if (data.success && data.data) {
+          setStoreConfig(data.data);
+        }
+      } catch (err) {
+        console.error('Failed fetching store config:', err);
+      }
+    };
+    fetchStore();
+    const interval = setInterval(fetchStore, 15000);
+    return () => clearInterval(interval);
   }, []);
 
   // Dynamic Menu Availability State
@@ -299,6 +321,7 @@ function OrderingAppContent() {
   };
 
   const activeZones = deliverySettings?.zones?.filter((z) => z.isActive) || [];
+  const isStoreOpen = storeConfig ? ((storeConfig as any).effectiveIsOpen ?? storeConfig.isOpen) : true;
 
   return (
     <div className="min-h-screen pb-28 max-w-md mx-auto bg-slate-50 relative shadow-xl">
@@ -406,6 +429,19 @@ function OrderingAppContent() {
           )}
         </div>
       </header>
+
+      {/* Banner Resto Tutup */}
+      {!isStoreOpen && (
+        <div className="mx-4 mt-3 p-3.5 bg-rose-50 border border-rose-200 rounded-2xl flex items-start gap-2.5 text-rose-800 shadow-sm animate-pulse">
+          <span className="text-xl">⛔</span>
+          <div className="text-xs">
+            <h4 className="font-bold text-rose-900 text-sm">Resto Saat Ini Sedang Tutup</h4>
+            <p className="text-[11px] text-rose-700 mt-0.5 leading-snug">
+              {storeConfig?.closedMessage || 'Jam operasional kami buka pukul 10:00 - 22:00 WIB. Anda tetap dapat melihat-lihat daftar menu hidangan kami.'}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Mode Banner Info Alert */}
       {orderType === 'delivery' && (
@@ -1049,11 +1085,13 @@ function OrderingAppContent() {
             {/* Footer Checkout Button */}
             <div className="p-4 border-t border-slate-100 bg-white space-y-2">
               <button
-                disabled={isSubmitting || cart.length === 0}
+                disabled={isSubmitting || cart.length === 0 || !isStoreOpen}
                 onClick={handleSubmitOrder}
                 className="w-full py-3.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-xl text-sm font-bold shadow-md shadow-red-200 flex items-center justify-center gap-2 transition active:scale-[0.98]"
               >
-                {isSubmitting ? (
+                {!isStoreOpen ? (
+                  <span>⛔ Resto Sedang Tutup</span>
+                ) : isSubmitting ? (
                   <span>Mengirim Pesanan...</span>
                 ) : (
                   <>

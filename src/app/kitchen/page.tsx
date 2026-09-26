@@ -28,44 +28,13 @@ import {
   RotateCcw,
   Download,
   AlertTriangle,
-  X
+  X,
+  Bell
 } from 'lucide-react';
 import { Order, OrderStatus } from '@/types/order';
-
-// Web Audio API Chime Synthesizer
-function playNewOrderChime() {
-  try {
-    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContext) return;
-    const ctx = new AudioContext();
-    
-    // Nada 1: 587.33 Hz (D5)
-    const osc1 = ctx.createOscillator();
-    const gain1 = ctx.createGain();
-    osc1.type = 'sine';
-    osc1.frequency.setValueAtTime(587.33, ctx.currentTime);
-    gain1.gain.setValueAtTime(0.3, ctx.currentTime);
-    gain1.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
-    osc1.connect(gain1);
-    gain1.connect(ctx.destination);
-    osc1.start(ctx.currentTime);
-    osc1.stop(ctx.currentTime + 0.4);
-
-    // Nada 2: 880 Hz (A5)
-    const osc2 = ctx.createOscillator();
-    const gain2 = ctx.createGain();
-    osc2.type = 'sine';
-    osc2.frequency.setValueAtTime(880, ctx.currentTime + 0.15);
-    gain2.gain.setValueAtTime(0.3, ctx.currentTime + 0.15);
-    gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.6);
-    osc2.connect(gain2);
-    gain2.connect(ctx.destination);
-    osc2.start(ctx.currentTime + 0.15);
-    osc2.stop(ctx.currentTime + 0.6);
-  } catch (err) {
-    console.error('Audio play error:', err);
-  }
-}
+import { playNewOrderChime } from '@/lib/audio-chime';
+import { generateCustomerWhatsAppUrl, generateCourierWhatsAppUrl } from '@/lib/whatsapp-helper';
+import ThermalReceiptModal from '@/components/ThermalReceiptModal';
 
 export default function KitchenDashboardPage() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -170,12 +139,9 @@ export default function KitchenDashboardPage() {
     }
   };
 
-  // Cetak Kitchen Slip / Kasir Receipt
+  // Buka Modal Cetak Struk Thermal
   const handlePrint = (order: Order) => {
     setPrintingOrder(order);
-    setTimeout(() => {
-      window.print();
-    }, 200);
   };
 
   // Filter List Status
@@ -269,6 +235,19 @@ export default function KitchenDashboardPage() {
             >
               {audioEnabled ? <Volume2 className="w-3.5 h-3.5 text-amber-400" /> : <VolumeX className="w-3.5 h-3.5" />}
               <span className="hidden sm:inline">{audioEnabled ? 'Alarm: On' : 'Alarm: Mute'}</span>
+            </button>
+
+            {/* Tombol Tes Bell */}
+            <button
+              onClick={() => {
+                setAudioEnabled(true);
+                playNewOrderChime();
+              }}
+              className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-750 text-amber-300 border border-slate-700 transition active:scale-95 shadow-sm"
+              title="Uji coba suara lonceng pesanan masuk (Audio Bell)"
+            >
+              <Bell className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden md:inline">Tes Bell</span>
             </button>
 
             {/* Link POS Kasir & Rekap */}
@@ -587,13 +566,11 @@ export default function KitchenDashboardPage() {
 
                     {order.customerPhone && (
                       <a
-                        href={`https://wa.me/${order.customerPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
-                          `Halo Kak ${order.customerName}, konfirmasi pesanan ${order.orderNumber} dari HR Food siap diproses ya!`
-                        )}`}
+                        href={generateCustomerWhatsAppUrl(order)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="p-2 rounded-lg bg-emerald-600/30 text-emerald-400 hover:bg-emerald-600/50 transition"
-                        title="Chat WA Customer"
+                        title="Chat WA Pelanggan (Format Pesanan)"
                       >
                         <MessageCircle className="w-3.5 h-3.5" />
                       </a>
@@ -732,18 +709,28 @@ export default function KitchenDashboardPage() {
                           </p>
                         )}
                         {order.customerPhone && (
-                          <div className="pt-1 flex items-center justify-between text-[11px] text-purple-200 border-t border-purple-800/40">
-                            <span>WA: {order.customerPhone}</span>
-                            <a
-                              href={`https://wa.me/${order.customerPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
-                                `Halo Kak ${order.customerName}, kami dari HR Food ingin mengonfirmasi pesanan ${order.orderNumber}.`
-                              )}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-[10px] font-bold text-emerald-400 hover:underline flex items-center gap-0.5"
-                            >
-                              <MessageCircle className="w-3 h-3" /> Chat
-                            </a>
+                          <div className="pt-1.5 flex items-center justify-between text-[11px] text-purple-200 border-t border-purple-800/40 gap-1.5 flex-wrap">
+                            <span className="font-mono text-[10px]">WA: {order.customerPhone}</span>
+                            <div className="flex items-center gap-1.5">
+                              <a
+                                href={generateCustomerWhatsAppUrl(order)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-2 py-0.5 rounded-lg bg-emerald-600/30 text-emerald-400 hover:bg-emerald-600/50 text-[10px] font-bold flex items-center gap-1 transition"
+                                title="Kirim status pesanan ke Pelanggan via WhatsApp"
+                              >
+                                <MessageCircle className="w-3 h-3" /> WA Tamu
+                              </a>
+                              <a
+                                href={generateCourierWhatsAppUrl(order)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-2 py-0.5 rounded-lg bg-indigo-600/40 text-indigo-300 hover:bg-indigo-600/60 text-[10px] font-bold flex items-center gap-1 transition"
+                                title="Kirim tugas pengantaran ke Kurir via WhatsApp"
+                              >
+                                <Bike className="w-3 h-3" /> Tugas Kurir
+                              </a>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -912,92 +899,11 @@ export default function KitchenDashboardPage() {
         </div>
       )}
 
-      {/* Printable Receipt */}
-      {printingOrder && (
-        <div id="printable-receipt" className="hidden print:block text-black bg-white font-mono text-xs p-4">
-          <div className="text-center pb-2 border-b border-dashed border-black">
-            <h2 className="text-sm font-bold">HR FOOD</h2>
-            <p className="text-[10px]">MASAKAN RUMAHAN RASA JUARA!</p>
-            <p className="text-[10px]">WA / Delivery: 0838-3843-2860</p>
-            <p className="text-[9px]">{new Date(printingOrder.createdAt).toLocaleString('id-ID')}</p>
-          </div>
-
-          <div className="py-2 border-b border-dashed border-black">
-            <div className="flex justify-between font-bold text-sm">
-              <span>
-                {printingOrder.orderType === 'delivery'
-                  ? '🛵 DELIVERY'
-                  : printingOrder.orderType === 'takeaway'
-                  ? '🛍️ BUNGKUS'
-                  : `MEJA: ${printingOrder.tableNumber}`}
-              </span>
-              <span>{printingOrder.orderNumber}</span>
-            </div>
-            <p className="text-[11px]">Tamu: {printingOrder.customerName}</p>
-            {printingOrder.orderType === 'delivery' && (
-              <>
-                <p className="text-[10px]">Alamat: {printingOrder.deliveryAddress}</p>
-                {printingOrder.deliveryNotes && (
-                  <p className="text-[9px]">Patokan: {printingOrder.deliveryNotes}</p>
-                )}
-                {printingOrder.customerPhone && (
-                  <p className="text-[10px]">WA: {printingOrder.customerPhone}</p>
-                )}
-              </>
-            )}
-            <p className="text-[10px] mt-1 font-bold">
-              Status: {printingOrder.isPaid ? 'LUNAS' : 'BELUM BAYAR (COD / KASIR)'}
-            </p>
-          </div>
-
-          <div className="py-2 border-b border-dashed border-black space-y-2">
-            {printingOrder.items.map((item, idx) => (
-              <div key={idx}>
-                <div className="flex justify-between font-bold">
-                  <span>{item.quantity}x {item.name}</span>
-                  <span>{(item.unitPrice * item.quantity).toLocaleString('id-ID')}</span>
-                </div>
-                {item.selectedOptions.length > 0 && (
-                  <p className="text-[9px] pl-3">
-                    {item.selectedOptions.map((o) => o.choiceLabel).join(', ')}
-                  </p>
-                )}
-                {item.notes && (
-                  <p className="text-[10px] pl-3 font-bold">
-                    ** CATATAN: {item.notes} **
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-
-          <div className="py-2 text-[10px] space-y-0.5">
-            <div className="flex justify-between">
-              <span>Subtotal:</span>
-              <span>Rp {printingOrder.subtotal.toLocaleString('id-ID')}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Pajak (PB1 10%):</span>
-              <span>Rp {printingOrder.tax.toLocaleString('id-ID')}</span>
-            </div>
-            {printingOrder.orderType === 'delivery' && (
-              <div className="flex justify-between font-semibold">
-                <span>Ongkos Kirim:</span>
-                <span>Rp {(printingOrder.deliveryFee || 0).toLocaleString('id-ID')}</span>
-              </div>
-            )}
-            <div className="flex justify-between font-bold text-xs pt-1 border-t border-black">
-              <span>TOTAL:</span>
-              <span>Rp {printingOrder.total.toLocaleString('id-ID')}</span>
-            </div>
-          </div>
-
-          <div className="text-center pt-3 border-t border-dashed border-black text-[9px]">
-            <p>Terima kasih atas pesanan Anda!</p>
-            <p>HR Food - Makan Enak, Mood Naik!</p>
-          </div>
-        </div>
-      )}
+      {/* Thermal Receipt Modal (58mm / 80mm & Tiket Dapur / Struk Tamu) */}
+      <ThermalReceiptModal
+        order={printingOrder}
+        onClose={() => setPrintingOrder(null)}
+      />
     </div>
   );
 }

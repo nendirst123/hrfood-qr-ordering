@@ -5,6 +5,7 @@ export const RESTAURANT_INFO = {
   tagline: 'Makan Enak, Mood Naik!',
   subtagline: 'Masakan Rumahan Rasa Juara!',
   phone: '0838-3843-2860',
+  address: 'Pusat Kuliner HR Food, Layanan Dine-in & Delivery',
   description: 'Fresh • Lezat • Bersih • Terjangkau',
   notesTitle: 'Tentukan Sendiri Level Pedasmu!',
 };
