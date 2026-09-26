@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<body>
+<canvas id="c" width="1080" height="1920" style="background:#b91c1c;"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let frame = 0;
+const stream = canvas.captureStream(30);
+const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+const chunks = [];
+recorder.ondataavailable = e => chunks.push(e.data);
+recorder.onstop = async () => {
+    const blob = new Blob(chunks, { type: 'video/webm' });
+    const reader = new FileReader();
+    reader.onload = () => {
+        window.__recordedData = reader.result;
+        console.log("RECORDING_DONE");
+    };
+    reader.readAsDataURL(blob);
+};
+recorder.start();
+
+function animate() {
+    ctx.fillStyle = '#b91c1c';
+    ctx.fillRect(0,0,1080,1920);
+    ctx.fillStyle = '#fef08a';
+    ctx.font = 'bold 80px sans-serif';
+    ctx.fillText("FRAME " + frame, 200, 500 + frame);
+    frame++;
+    if (frame < 60) {
+        requestAnimationFrame(animate);
+    } else {
+        recorder.stop();
+    }
+}
+animate();
+</script>
+</body>
+</html>

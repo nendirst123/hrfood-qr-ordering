@@ -1,0 +1,280 @@
+[
+  {
+    "id": "ord_1790051821570_5qrwi",
+    "orderNumber": "ORD-006",
+    "tableNumber": "01",
+    "customerName": "bbbdd",
+    "items": [
+      {
+        "itemId": "hr-ayam-01",
+        "name": "Ayam Kampung Goreng Super",
+        "basePrice": 19000,
+        "unitPrice": 19000,
+        "quantity": 1,
+        "selectedOptions": [
+          {
+            "optionName": "Pilihan Varian Sambal",
+            "choiceLabel": "Sambal Terasi (Klasik & Nagih)",
+            "extraPrice": 0
+          },
+          {
+            "optionName": "Level Pedas",
+            "choiceLabel": "Level 1 - Sedang Gurih",
+            "extraPrice": 0
+          }
+        ],
+        "image": "/menu/ayam-kampung.jpg"
+      }
+    ],
+    "subtotal": 19000,
+    "tax": 1900,
+    "total": 20900,
+    "paymentMethod": "qris",
+    "isPaid": true,
+    "status": "cooking",
+    "createdAt": "2026-09-22T04:37:01.570Z",
+    "updatedAt": "2026-09-22T04:37:01.570Z"
+  },
+  {
+    "id": "ord_1790051788711_994ps",
+    "orderNumber": "ORD-005",
+    "tableNumber": "01",
+    "customerName": "nendi",
+    "items": [
+      {
+        "itemId": "hr-ayam-01",
+        "name": "Ayam Kampung Goreng Super",
+        "basePrice": 19000,
+        "unitPrice": 19000,
+        "quantity": 1,
+        "selectedOptions": [
+          {
+            "optionName": "Pilihan Varian Sambal",
+            "choiceLabel": "Sambal Terasi (Klasik & Nagih)",
+            "extraPrice": 0
+          },
+          {
+            "optionName": "Level Pedas",
+            "choiceLabel": "Level 2 - Pedas Mantap",
+            "extraPrice": 0
+          }
+        ],
+        "image": "/menu/ayam-kampung.jpg"
+      },
+      {
+        "itemId": "hr-ikan-01",
+        "name": "Ikan Goreng Spesial",
+        "basePrice": 15000,
+        "unitPrice": 15000,
+        "quantity": 1,
+        "selectedOptions": [
+          {
+            "optionName": "Pilihan Varian Sambal",
+            "choiceLabel": "Sambal Terasi (Klasik & Nagih)",
+            "extraPrice": 0
+          },
+          {
+            "optionName": "Level Pedas",
+            "choiceLabel": "Level 2 - Pedas Mantap",
+            "extraPrice": 0
+          }
+        ],
+        "image": "/menu/ikan-goreng.jpg"
+      }
+    ],
+    "subtotal": 34000,
+    "tax": 3400,
+    "total": 37400,
+    "paymentMethod": "qris",
+    "isPaid": true,
+    "status": "cooking",
+    "createdAt": "2026-09-22T04:36:28.711Z",
+    "updatedAt": "2026-09-22T04:36:28.711Z"
+  },
+  {
+    "id": "ord_1790051375553_bl9g6",
+    "orderNumber": "ORD-004",
+    "tableNumber": "01",
+    "customerName": "buru nua",
+    "items": [
+      {
+        "itemId": "hr-ayam-01",
+        "name": "Ayam Kampung Goreng Super",
+        "basePrice": 19000,
+        "unitPrice": 20000,
+        "quantity": 1,
+        "selectedOptions": [
+          {
+            "optionName": "Pilihan Varian Sambal",
+            "choiceLabel": "Sambal Bawang (Segar & Pedas)",
+            "extraPrice": 0
+          },
+          {
+            "optionName": "Level Pedas",
+            "choiceLabel": "Level 3 - Pedas Nampol (Extra Cabe)",
+            "extraPrice": 1000
+          }
+        ],
+        "image": "/menu/ayam-kampung.jpg"
+      },
+      {
+        "itemId": "hr-ayam-02",
+        "name": "Ayam Goreng Besar",
+        "basePrice": 15000,
+        "unitPrice": 15000,
+        "quantity": 1,
+        "selectedOptions": [
+          {
+            "optionName": "Pilihan Varian Sambal",
+            "choiceLabel": "Sambal Cabe Ijo (Pedasnya Mantap)",
+            "extraPrice": 0
+          },
+          {
+            "optionName": "Level Pedas",
+            "choiceLabel": "Level 1 - Sedang Gurih",
+            "extraPrice": 0
+          }
+        ],
+        "image": "/menu/ayam-goreng-besar.jpg"
+      }
+    ],
+    "subtotal": 35000,
+    "tax": 3500,
+    "total": 38500,
+    "paymentMethod": "cashier",
+    "isPaid": false,
+    "status": "pending_payment",
+    "createdAt": "2026-09-22T04:29:35.553Z",
+    "updatedAt": "2026-09-22T04:29:35.553Z"
+  },
+  {
+    "id": "ord_1790045869158_fu2h9",
+    "orderNumber": "ORD-003",
+    "tableNumber": "03",
+    "customerName": "Budi Santoso",
+    "items": [
+      {
+        "itemId": "hr-ayam-01",
+        "name": "Ayam Kampung Goreng",
+        "basePrice": 18000,
+        "unitPrice": 18000,
+        "quantity": 2,
+        "selectedOptions": [
+          {
+            "optionName": "Pilihan Varian Sambal",
+            "choiceLabel": "Sambal Terasi (Klasik & Nagih)",
+            "extraPrice": 0
+          },
+          {
+            "optionName": "Level Pedas",
+            "choiceLabel": "Level 2 - Pedas Mantap",
+            "extraPrice": 0
+          }
+        ],
+        "notes": "Goreng Garing",
+        "image": "/menu/ayam-kampung.jpg"
+      },
+      {
+        "itemId": "hr-ikan-02",
+        "name": "Lele Goreng Crispy",
+        "basePrice": 10000,
+        "unitPrice": 10000,
+        "quantity": 1,
+        "selectedOptions": [
+          {
+            "optionName": "Pilihan Varian Sambal",
+            "choiceLabel": "Sambal Bawang (Segar & Pedas)",
+            "extraPrice": 0
+          }
+        ],
+        "image": "/menu/lele-goreng.jpg"
+      }
+    ],
+    "subtotal": 46000,
+    "tax": 4600,
+    "total": 50600,
+    "paymentMethod": "qris",
+    "isPaid": true,
+    "status": "cooking",
+    "createdAt": "2026-09-22T02:57:49.158Z",
+    "updatedAt": "2026-09-22T02:57:49.158Z"
+  },
+  {
+    "id": "ord_1789993749337_7oxmo",
+    "orderNumber": "ORD-002",
+    "tableNumber": "03",
+    "customerName": "nendi",
+    "items": [
+      {
+        "itemId": "hr-sambal-01",
+        "name": "Sambal Terasi (Klasik & Nagih)",
+        "basePrice": 3000,
+        "unitPrice": 3000,
+        "quantity": 1,
+        "selectedOptions": [
+          {
+            "optionName": "Tingkat Pedas",
+            "choiceLabel": "Level 1 - Sedang",
+            "extraPrice": 0
+          }
+        ],
+        "image": "/menu/sambal-terasi.jpg"
+      }
+    ],
+    "subtotal": 3000,
+    "tax": 300,
+    "total": 3300,
+    "paymentMethod": "cashier",
+    "isPaid": true,
+    "status": "completed",
+    "createdAt": "2026-09-21T12:29:09.337Z",
+    "updatedAt": "2026-09-22T04:16:13.025Z"
+  },
+  {
+    "id": "ord_1789986488289_tta5z",
+    "orderNumber": "ORD-001",
+    "tableNumber": "05",
+    "customerName": "Dimas Pratama",
+    "items": [
+      {
+        "itemId": "stk-01",
+        "name": "Steak Crispy Chicken Double",
+        "basePrice": 33000,
+        "unitPrice": 36000,
+        "quantity": 1,
+        "selectedOptions": [
+          {
+            "optionName": "Pilihan Saus",
+            "choiceLabel": "Creamy Cheese Sauce",
+            "extraPrice": 3000
+          }
+        ],
+        "notes": "Saus dipisah di mangkok kecil ya kak",
+        "image": "https://images.unsplash.com/photo-1598515214211-89d3c73ae83b"
+      },
+      {
+        "itemId": "drk-01",
+        "name": "Special Chocolate Milkshake",
+        "basePrice": 17000,
+        "unitPrice": 17000,
+        "quantity": 1,
+        "selectedOptions": [
+          {
+            "optionName": "Gula",
+            "choiceLabel": "Less Sugar (70%)",
+            "extraPrice": 0
+          }
+        ],
+        "image": "https://images.unsplash.com/photo-1572490122747-3968b75cc699"
+      }
+    ],
+    "subtotal": 53000,
+    "tax": 5300,
+    "total": 58300,
+    "paymentMethod": "cashier",
+    "isPaid": true,
+    "status": "cooking",
+    "createdAt": "2026-09-21T10:28:08.289Z",
+    "updatedAt": "2026-09-21T10:28:13.877Z"
+  }
+]
