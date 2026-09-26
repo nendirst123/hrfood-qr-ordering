@@ -1,5 +1,221 @@
 [
   {
+    "id": "hr-paket-01",
+    "name": "Paket Puas Ayam Kampung",
+    "category": "Paket Hemat",
+    "price": 26000,
+    "description": "Nasi pulen + Ayam Kampung Goreng rempah + Tahu & Tempe + Lalapan segar + Pilihan Sambal & Level + Es Teh Manis Jumbo.",
+    "image": "https://images.unsplash.com/photo-1626082927389-6cd097cdc6ec?auto=format&fit=crop&w=600&q=80",
+    "isPopular": true,
+    "options": [
+      {
+        "name": "Pilihan Varian Sambal",
+        "choices": [
+          {
+            "label": "Sambal Terasi (Klasik & Nagih)",
+            "extraPrice": 0
+          },
+          {
+            "label": "Sambal Bawang (Segar & Pedas)",
+            "extraPrice": 0
+          },
+          {
+            "label": "Sambal Cabe Ijo (Pedasnya Mantap)",
+            "extraPrice": 0
+          },
+          {
+            "label": "Tanpa Sambal / Sambal Dipisah",
+            "extraPrice": 0
+          }
+        ]
+      },
+      {
+        "name": "Level Pedas",
+        "choices": [
+          {
+            "label": "Level 1 - Sedang Gurih",
+            "extraPrice": 0
+          },
+          {
+            "label": "Level 2 - Pedas Mantap",
+            "extraPrice": 0
+          },
+          {
+            "label": "Level 3 - Pedas Nampol (Extra Cabe)",
+            "extraPrice": 1000
+          },
+          {
+            "label": "Level 0 - Tidak Pedas",
+            "extraPrice": 0
+          }
+        ]
+      }
+    ],
+    "isAvailable": true
+  },
+  {
+    "id": "hr-paket-02",
+    "name": "Paket Mantap Ayam Kremes",
+    "category": "Paket Hemat",
+    "price": 22000,
+    "description": "Nasi pulen + Ayam Goreng Besar kremes gurih + Tahu & Tempe + Lalapan segar + Pilihan Sambal + Es Teh Manis Jumbo.",
+    "image": "https://images.unsplash.com/photo-1598515214211-89d3c73ae83b?auto=format&fit=crop&w=600&q=80",
+    "isPopular": true,
+    "options": [
+      {
+        "name": "Pilihan Varian Sambal",
+        "choices": [
+          {
+            "label": "Sambal Terasi (Klasik & Nagih)",
+            "extraPrice": 0
+          },
+          {
+            "label": "Sambal Bawang (Segar & Pedas)",
+            "extraPrice": 0
+          },
+          {
+            "label": "Sambal Cabe Ijo (Pedasnya Mantap)",
+            "extraPrice": 0
+          },
+          {
+            "label": "Tanpa Sambal / Sambal Dipisah",
+            "extraPrice": 0
+          }
+        ]
+      },
+      {
+        "name": "Level Pedas",
+        "choices": [
+          {
+            "label": "Level 1 - Sedang Gurih",
+            "extraPrice": 0
+          },
+          {
+            "label": "Level 2 - Pedas Mantap",
+            "extraPrice": 0
+          },
+          {
+            "label": "Level 3 - Pedas Nampol (Extra Cabe)",
+            "extraPrice": 1000
+          },
+          {
+            "label": "Level 0 - Tidak Pedas",
+            "extraPrice": 0
+          }
+        ]
+      }
+    ],
+    "isAvailable": true
+  },
+  {
+    "id": "hr-paket-03",
+    "name": "Paket Ekonomis Lele Crispy",
+    "category": "Paket Hemat",
+    "price": 17000,
+    "description": "Nasi pulen + Lele Goreng Crispy gurih + Tahu goreng + Lalapan + Pilihan Sambal + Es Teh Manis Jumbo.",
+    "image": "https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?auto=format&fit=crop&w=600&q=80",
+    "isPopular": true,
+    "options": [
+      {
+        "name": "Pilihan Varian Sambal",
+        "choices": [
+          {
+            "label": "Sambal Terasi (Klasik & Nagih)",
+            "extraPrice": 0
+          },
+          {
+            "label": "Sambal Bawang (Segar & Pedas)",
+            "extraPrice": 0
+          },
+          {
+            "label": "Sambal Cabe Ijo (Pedasnya Mantap)",
+            "extraPrice": 0
+          },
+          {
+            "label": "Tanpa Sambal / Sambal Dipisah",
+            "extraPrice": 0
+          }
+        ]
+      },
+      {
+        "name": "Level Pedas",
+        "choices": [
+          {
+            "label": "Level 1 - Sedang Gurih",
+            "extraPrice": 0
+          },
+          {
+            "label": "Level 2 - Pedas Mantap",
+            "extraPrice": 0
+          },
+          {
+            "label": "Level 3 - Pedas Nampol (Extra Cabe)",
+            "extraPrice": 1000
+          },
+          {
+            "label": "Level 0 - Tidak Pedas",
+            "extraPrice": 0
+          }
+        ]
+      }
+    ],
+    "isAvailable": true
+  },
+  {
+    "id": "hr-paket-04",
+    "name": "Paket Hemat Paha Pentung",
+    "category": "Paket Hemat",
+    "price": 15000,
+    "description": "Nasi pulen + Paha Pentung gurih + Lalapan + Pilihan Sambal + Teh Tawar dingin/hangat.",
+    "image": "https://images.unsplash.com/photo-1527477396000-e27163b481c2?auto=format&fit=crop&w=600&q=80",
+    "isPopular": true,
+    "options": [
+      {
+        "name": "Pilihan Varian Sambal",
+        "choices": [
+          {
+            "label": "Sambal Terasi (Klasik & Nagih)",
+            "extraPrice": 0
+          },
+          {
+            "label": "Sambal Bawang (Segar & Pedas)",
+            "extraPrice": 0
+          },
+          {
+            "label": "Sambal Cabe Ijo (Pedasnya Mantap)",
+            "extraPrice": 0
+          },
+          {
+            "label": "Tanpa Sambal / Sambal Dipisah",
+            "extraPrice": 0
+          }
+        ]
+      },
+      {
+        "name": "Level Pedas",
+        "choices": [
+          {
+            "label": "Level 1 - Sedang Gurih",
+            "extraPrice": 0
+          },
+          {
+            "label": "Level 2 - Pedas Mantap",
+            "extraPrice": 0
+          },
+          {
+            "label": "Level 3 - Pedas Nampol (Extra Cabe)",
+            "extraPrice": 1000
+          },
+          {
+            "label": "Level 0 - Tidak Pedas",
+            "extraPrice": 0
+          }
+        ]
+      }
+    ],
+    "isAvailable": true
+  },
+  {
     "id": "hr-ayam-01",
     "name": "Ayam Kampung Goreng Super",
     "category": "Ayam & Bebek",
@@ -114,6 +330,114 @@
     "price": 10000,
     "description": "Paha ayam pentung juicy digoreng bumbu rempah mantap, pas untuk porsi hemat.",
     "image": "/menu/ayam-paha-pentung.jpg",
+    "options": [
+      {
+        "name": "Pilihan Varian Sambal",
+        "choices": [
+          {
+            "label": "Sambal Terasi (Klasik & Nagih)",
+            "extraPrice": 0
+          },
+          {
+            "label": "Sambal Bawang (Segar & Pedas)",
+            "extraPrice": 0
+          },
+          {
+            "label": "Sambal Cabe Ijo (Pedasnya Mantap)",
+            "extraPrice": 0
+          },
+          {
+            "label": "Tanpa Sambal / Sambal Dipisah",
+            "extraPrice": 0
+          }
+        ]
+      },
+      {
+        "name": "Level Pedas",
+        "choices": [
+          {
+            "label": "Level 1 - Sedang Gurih",
+            "extraPrice": 0
+          },
+          {
+            "label": "Level 2 - Pedas Mantap",
+            "extraPrice": 0
+          },
+          {
+            "label": "Level 3 - Pedas Nampol (Extra Cabe)",
+            "extraPrice": 1000
+          },
+          {
+            "label": "Level 0 - Tidak Pedas",
+            "extraPrice": 0
+          }
+        ]
+      }
+    ],
+    "isAvailable": true
+  },
+  {
+    "id": "hr-ayam-06",
+    "name": "Ayam Bakar Madu Gurih",
+    "category": "Ayam & Bebek",
+    "price": 16000,
+    "description": "Potongan ayam bumbu rempah dioles kecap madu gurih manis, dibakar wangi meresap hingga ke serat daging.",
+    "image": "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=600&q=80",
+    "isPopular": true,
+    "options": [
+      {
+        "name": "Pilihan Varian Sambal",
+        "choices": [
+          {
+            "label": "Sambal Terasi (Klasik & Nagih)",
+            "extraPrice": 0
+          },
+          {
+            "label": "Sambal Bawang (Segar & Pedas)",
+            "extraPrice": 0
+          },
+          {
+            "label": "Sambal Cabe Ijo (Pedasnya Mantap)",
+            "extraPrice": 0
+          },
+          {
+            "label": "Tanpa Sambal / Sambal Dipisah",
+            "extraPrice": 0
+          }
+        ]
+      },
+      {
+        "name": "Level Pedas",
+        "choices": [
+          {
+            "label": "Level 1 - Sedang Gurih",
+            "extraPrice": 0
+          },
+          {
+            "label": "Level 2 - Pedas Mantap",
+            "extraPrice": 0
+          },
+          {
+            "label": "Level 3 - Pedas Nampol (Extra Cabe)",
+            "extraPrice": 1000
+          },
+          {
+            "label": "Level 0 - Tidak Pedas",
+            "extraPrice": 0
+          }
+        ]
+      }
+    ],
+    "isAvailable": true
+  },
+  {
+    "id": "hr-bebek-01",
+    "name": "Bebek Goreng Rempah Gurih",
+    "category": "Ayam & Bebek",
+    "price": 24000,
+    "description": "Bebek muda empuk bebas bau amis diungkep rempah kuning gurih, digoreng garing dengan taburan serundeng lengkuas.",
+    "image": "https://images.unsplash.com/photo-1518492104633-130d0cc84637?auto=format&fit=crop&w=600&q=80",
+    "isPopular": true,
     "options": [
       {
         "name": "Pilihan Varian Sambal",
@@ -332,6 +656,60 @@
     "isAvailable": true
   },
   {
+    "id": "hr-ikan-04",
+    "name": "Nila Bakar Kecap Pedas Manis",
+    "category": "Ikan & Seafood",
+    "price": 16000,
+    "description": "Ikan nila segar dibakar bumbu oles kecap rempah gurih manis wangi khas bakaran tradisional.",
+    "image": "https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?auto=format&fit=crop&w=600&q=80",
+    "isPopular": true,
+    "options": [
+      {
+        "name": "Pilihan Varian Sambal",
+        "choices": [
+          {
+            "label": "Sambal Terasi (Klasik & Nagih)",
+            "extraPrice": 0
+          },
+          {
+            "label": "Sambal Bawang (Segar & Pedas)",
+            "extraPrice": 0
+          },
+          {
+            "label": "Sambal Cabe Ijo (Pedasnya Mantap)",
+            "extraPrice": 0
+          },
+          {
+            "label": "Tanpa Sambal / Sambal Dipisah",
+            "extraPrice": 0
+          }
+        ]
+      },
+      {
+        "name": "Level Pedas",
+        "choices": [
+          {
+            "label": "Level 1 - Sedang Gurih",
+            "extraPrice": 0
+          },
+          {
+            "label": "Level 2 - Pedas Mantap",
+            "extraPrice": 0
+          },
+          {
+            "label": "Level 3 - Pedas Nampol (Extra Cabe)",
+            "extraPrice": 1000
+          },
+          {
+            "label": "Level 0 - Tidak Pedas",
+            "extraPrice": 0
+          }
+        ]
+      }
+    ],
+    "isAvailable": true
+  },
+  {
     "id": "hr-ikan-03",
     "name": "Ikan Asin Goreng",
     "category": "Ikan & Seafood",
@@ -376,6 +754,46 @@
     "price": 3000,
     "description": "Usus ayam bersih dimasak bumbu kuning lalu digoreng gurih.",
     "image": "/menu/sate-usus.jpg",
+    "isAvailable": true
+  },
+  {
+    "id": "hr-sayur-07",
+    "name": "Sayur Asem Segar Rumahan",
+    "category": "Sayur & Pelengkap",
+    "price": 6000,
+    "description": "Sayur asem kuah bening segar asam manis berpadu jagung manis, labu siam, kacang panjang, dan melinjo.",
+    "image": "https://images.unsplash.com/photo-1547592166-23ac45744acd?auto=format&fit=crop&w=600&q=80",
+    "isPopular": true,
+    "isAvailable": true
+  },
+  {
+    "id": "hr-sayur-08",
+    "name": "Sayur Sop Ayam Bening",
+    "category": "Sayur & Pelengkap",
+    "price": 7000,
+    "description": "Sop kaldu ayam bening gurih hangat dengan wortel, kentang, buncis, seledri, dan bawang goreng. Favorit anak-anak.",
+    "image": "https://images.unsplash.com/photo-1604152135912-04a022e23696?auto=format&fit=crop&w=600&q=80",
+    "isPopular": false,
+    "isAvailable": true
+  },
+  {
+    "id": "hr-sayur-09",
+    "name": "Bakwan Jagung Renyah (Isi 2)",
+    "category": "Sayur & Pelengkap",
+    "price": 5000,
+    "description": "Bakwan jagung manis pipil renyah gurih keemasan, pelengkap wajib makan berselera.",
+    "image": "https://images.unsplash.com/photo-1541832676-9b763b0239ab?auto=format&fit=crop&w=600&q=80",
+    "isPopular": true,
+    "isAvailable": true
+  },
+  {
+    "id": "hr-sayur-10",
+    "name": "Telur Dadar Crispy Gurih",
+    "category": "Sayur & Pelengkap",
+    "price": 4000,
+    "description": "Telur ayam kocok bumbu daun bawang digoreng garing keriting renyah.",
+    "image": "https://images.unsplash.com/photo-1525351484163-7529414344d8?auto=format&fit=crop&w=600&q=80",
+    "isPopular": false,
     "isAvailable": true
   },
   {
@@ -504,6 +922,26 @@
     "isAvailable": true
   },
   {
+    "id": "hr-nasi-01",
+    "name": "Nasi Putih Pulen",
+    "category": "Nasi & Minuman",
+    "price": 5000,
+    "description": "Nasi putih beras pilihan hangat pulen porsi mengenyangkan.",
+    "image": "https://images.unsplash.com/photo-1512058564366-18510be2db19?auto=format&fit=crop&w=600&q=80",
+    "isPopular": true,
+    "isAvailable": true
+  },
+  {
+    "id": "hr-nasi-02",
+    "name": "Nasi Uduk Gurih Wangi",
+    "category": "Nasi & Minuman",
+    "price": 6000,
+    "description": "Nasi gurih beras pilihan dimasak santan, daun salam, serai wangi, dan taburan bawang goreng.",
+    "image": "https://images.unsplash.com/photo-1512058564366-18510be2db19?auto=format&fit=crop&w=600&q=80",
+    "isPopular": true,
+    "isAvailable": true
+  },
+  {
     "id": "hr-minum-01",
     "name": "Es Teh Manis Jumbo",
     "category": "Nasi & Minuman",
@@ -563,6 +1001,79 @@
     "isAvailable": true
   },
   {
+    "id": "hr-minum-05",
+    "name": "Es Timun Serut Selasih",
+    "category": "Nasi & Minuman",
+    "price": 5000,
+    "description": "Serutan timun hijau segar berpadu biji selasih, sirup melon manis, dan es batu dingin. Penawar pedas alami nomor 1.",
+    "image": "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&w=600&q=80",
+    "isPopular": true,
+    "isAvailable": true
+  },
+  {
+    "id": "hr-minum-06",
+    "name": "Es Cincau Gula Merah",
+    "category": "Nasi & Minuman",
+    "price": 5000,
+    "description": "Potongan cincau hitam kenyal lembut disiram kuah gula aren manis legit dan es batu dingin.",
+    "image": "https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=600&q=80",
+    "isPopular": true,
+    "isAvailable": true
+  },
+  {
+    "id": "hr-minum-07",
+    "name": "Kopi Hitam Tubruk Tradisional",
+    "category": "Nasi & Minuman",
+    "price": 4000,
+    "description": "Kopi hitam robusta seduh air mendidih beraroma mantap khas warung kampung.",
+    "image": "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=600&q=80",
+    "options": [
+      {
+        "name": "Kadar Manis",
+        "choices": [
+          {
+            "label": "Manis Sedang",
+            "extraPrice": 0
+          },
+          {
+            "label": "Pahit (Tanpa Gula)",
+            "extraPrice": 0
+          },
+          {
+            "label": "Extra Manis",
+            "extraPrice": 0
+          }
+        ]
+      }
+    ],
+    "isAvailable": true
+  },
+  {
+    "id": "hr-minum-08",
+    "name": "Kopi Susu Kampung Mantap",
+    "category": "Nasi & Minuman",
+    "price": 6000,
+    "description": "Perpaduan kopi hitam harum dengan kental manis gurih legit, nikmat disajikan panas atau es dingin.",
+    "image": "https://images.unsplash.com/photo-1517256064527-09c73fc73e38?auto=format&fit=crop&w=600&q=80",
+    "isPopular": true,
+    "options": [
+      {
+        "name": "Suhu Penyajian",
+        "choices": [
+          {
+            "label": "Es Dingin Segar",
+            "extraPrice": 0
+          },
+          {
+            "label": "Hangat / Panas",
+            "extraPrice": 0
+          }
+        ]
+      }
+    ],
+    "isAvailable": true
+  },
+  {
     "id": "hr-minum-04",
     "name": "Air Mineral Botol",
     "category": "Nasi & Minuman",
@@ -585,59 +1096,5 @@
       }
     ],
     "isAvailable": true
-  },
-  {
-    "name": "Ayam Bakar Madu HR",
-    "category": "Ayam & Bebek",
-    "price": 22000,
-    "description": "Ayam bakar dengan olesan bumbu rempah kecap madu manis gurih harum bakaran arang.",
-    "image": "/menu/ayam-goreng-besar.jpg",
-    "isPopular": true,
-    "isAvailable": true,
-    "options": [
-      {
-        "name": "Pilihan Varian Sambal",
-        "choices": [
-          {
-            "label": "Sambal Terasi (Klasik & Nagih)",
-            "extraPrice": 0
-          },
-          {
-            "label": "Sambal Bawang (Segar & Pedas)",
-            "extraPrice": 0
-          },
-          {
-            "label": "Sambal Cabe Ijo (Pedasnya Mantap)",
-            "extraPrice": 0
-          },
-          {
-            "label": "Tanpa Sambal / Sambal Dipisah",
-            "extraPrice": 0
-          }
-        ]
-      },
-      {
-        "name": "Level Pedas",
-        "choices": [
-          {
-            "label": "Level 1 - Sedang Gurih",
-            "extraPrice": 0
-          },
-          {
-            "label": "Level 2 - Pedas Mantap",
-            "extraPrice": 0
-          },
-          {
-            "label": "Level 3 - Pedas Nampol (Extra Cabe)",
-            "extraPrice": 1000
-          },
-          {
-            "label": "Level 0 - Tidak Pedas",
-            "extraPrice": 0
-          }
-        ]
-      }
-    ],
-    "id": "hr-custom-1790046496428-vz2h"
   }
 ]
