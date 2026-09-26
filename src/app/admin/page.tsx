@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { RESTAURANT_INFO, CATEGORIES } from '@/data/menu';
-import { MenuItem, Order, DeliverySettings, DeliveryZone, StoreConfig } from '@/types/order';
+import { MenuItem, Order, DeliverySettings, DeliveryZone, StoreConfig, PromoCode } from '@/types/order';
 import { playNewOrderChime } from '@/lib/audio-chime';
 import { generateCustomerWhatsAppUrl, generateCourierWhatsAppUrl } from '@/lib/whatsapp-helper';
 import ThermalReceiptModal from '@/components/ThermalReceiptModal';
@@ -27,7 +27,21 @@ interface ReportData {
 }
 
 export default function AdminDashboardPage() {
-  const [activeTab, setActiveTab] = useState<'analytics' | 'catalog' | 'delivery' | 'stock'>('analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'catalog' | 'delivery' | 'stock' | 'promo'>('analytics');
+
+  // Promo Codes State
+  const [promos, setPromos] = useState<PromoCode[]>([]);
+  const [isPromoModalOpen, setIsPromoModalOpen] = useState(false);
+  const [isSavingPromo, setIsSavingPromo] = useState(false);
+  const [editingPromo, setEditingPromo] = useState<PromoCode | null>(null);
+  const [promoCode, setPromoCode] = useState('');
+  const [promoTitle, setPromoTitle] = useState('');
+  const [promoType, setPromoType] = useState<'fixed' | 'percent'>('fixed');
+  const [promoValue, setPromoValue] = useState<number | string>('');
+  const [promoMinOrder, setPromoMinOrder] = useState<number | string>('');
+  const [promoMaxDiscount, setPromoMaxDiscount] = useState<number | string>('');
+  const [promoDesc, setPromoDesc] = useState('');
+  const [promoActive, setPromoActive] = useState(true);
   const [report, setReport] = useState<ReportData | null>(null);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('Semua');
@@ -96,16 +110,18 @@ export default function AdminDashboardPage() {
   const fetchData = async (overrideDate?: string) => {
     try {
       const activeDate = overrideDate !== undefined ? overrideDate : (reportDate === 'custom' ? customReportDate : reportDate);
-      const [resReport, resMenu, resDelivery, resStore] = await Promise.all([
+      const [resReport, resMenu, resDelivery, resStore, resPromos] = await Promise.all([
         fetch(`/api/reports?date=${activeDate}`),
         fetch('/api/menu'),
         fetch('/api/delivery'),
         fetch('/api/store-config'),
+        fetch('/api/promos?all=1'),
       ]);
       const dataReport = await resReport.json();
       const dataMenu = await resMenu.json();
       const dataDelivery = await resDelivery.json();
       const dataStore = await resStore.json();
+      const dataPromos = await resPromos.json();
 
       if (dataReport.success) {
         setReport(dataReport.data);
@@ -118,6 +134,7 @@ export default function AdminDashboardPage() {
       }
       if (dataMenu.success) setMenuItems(dataMenu.items);
       if (dataDelivery.success) setDeliverySettings(dataDelivery.data);
+      if (dataPromos.success && Array.isArray(dataPromos.data)) setPromos(dataPromos.data);
       if (dataStore.success && dataStore.data) {
         setStoreConfig(dataStore.data);
         setFormIsOpen(dataStore.data.isOpen);
@@ -157,7 +174,8 @@ export default function AdminDashboardPage() {
       'Alamat Pengantaran',
       'Rincian Menu',
       'Subtotal',
-      'Pajak PB1 (10%)',
+      'Kode Promo',
+      'Diskon Promo',
       'Ongkir',
       'Total Tagihan',
       'Metode Bayar',
@@ -176,7 +194,8 @@ export default function AdminDashboardPage() {
       `"${(o.deliveryAddress || '').replace(/"/g, '""')}"`,
       `"${o.items.map(it => `${it.quantity}x ${it.name}`).join('; ')}"`,
       o.subtotal,
-      o.tax,
+      o.discountCode || '-',
+      o.discountAmount ? `-Rp ${o.discountAmount}` : 'Rp 0',
       o.deliveryFee || 0,
       o.total,
       o.paymentMethod.toUpperCase(),
@@ -588,6 +607,117 @@ export default function AdminDashboardPage() {
     }
   };
 
+  // Handler Kupon Promo
+  const handleOpenPromoModal = (promo?: PromoCode) => {
+    if (promo) {
+      setEditingPromo(promo);
+      setPromoCode(promo.code);
+      setPromoTitle(promo.title);
+      setPromoType(promo.type);
+      setPromoValue(promo.value);
+      setPromoMinOrder(promo.minOrder || '');
+      setPromoMaxDiscount(promo.maxDiscount || '');
+      setPromoDesc(promo.description || '');
+      setPromoActive(promo.isActive !== false);
+    } else {
+      setEditingPromo(null);
+      setPromoCode('');
+      setPromoTitle('');
+      setPromoType('fixed');
+      setPromoValue('');
+      setPromoMinOrder('');
+      setPromoMaxDiscount('');
+      setPromoDesc('');
+      setPromoActive(true);
+    }
+    setIsPromoModalOpen(true);
+  };
+
+  const handleTogglePromoActive = async (id: string) => {
+    try {
+      const res = await fetch('/api/promos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'toggle', id }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchData();
+      } else {
+        alert(data.error || 'Gagal mengubah status kupon');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Gagal menghubungi server');
+    }
+  };
+
+  const handleDeletePromo = async (id: string) => {
+    if (!confirm('Yakin ingin menghapus kupon promo ini?')) return;
+    try {
+      const res = await fetch(`/api/promos?id=${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        fetchData();
+      } else {
+        alert(data.error || 'Gagal menghapus kupon promo');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Gagal menghubungi server');
+    }
+  };
+
+  const handleSavePromo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!promoCode.trim()) {
+      alert('Kode promo wajib diisi!');
+      return;
+    }
+    if (!promoTitle.trim()) {
+      alert('Judul promo wajib diisi!');
+      return;
+    }
+    if (!promoValue || Number(promoValue) <= 0) {
+      alert('Nilai potongan promo harus lebih dari 0!');
+      return;
+    }
+
+    setIsSavingPromo(true);
+    try {
+      const payload: any = {
+        id: editingPromo ? editingPromo.id : undefined,
+        code: promoCode.trim().toUpperCase(),
+        title: promoTitle.trim(),
+        type: promoType,
+        value: Number(promoValue),
+        minOrder: promoMinOrder ? Number(promoMinOrder) : 0,
+        maxDiscount: promoType === 'percent' && promoMaxDiscount ? Number(promoMaxDiscount) : undefined,
+        description: promoDesc.trim(),
+        isActive: promoActive,
+      };
+
+      const res = await fetch('/api/promos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setIsPromoModalOpen(false);
+        fetchData();
+      } else {
+        alert(data.error || 'Gagal menyimpan promo');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Gagal menghubungi server');
+    } finally {
+      setIsSavingPromo(false);
+    }
+  };
+
   const toIdr = (num: number) => {
     return 'Rp ' + (num || 0).toLocaleString('id-ID');
   };
@@ -814,6 +944,23 @@ export default function AdminDashboardPage() {
                 </span>
               )}
             </button>
+
+            <button
+              onClick={() => setActiveTab('promo')}
+              className={`flex items-center gap-1.5 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl font-bold text-xs transition shadow-sm flex-shrink-0 relative ${
+                activeTab === 'promo'
+                  ? 'bg-amber-600 text-white shadow-amber-900/30'
+                  : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-750'
+              }`}
+            >
+              <span>🎟️</span>
+              <span>Promo & Kupon</span>
+              {promos.filter(p => p.isActive).length > 0 && (
+                <span className="bg-amber-400 text-slate-950 text-[10px] font-black px-1.5 py-0.2 rounded-full ml-1">
+                  {promos.filter(p => p.isActive).length}
+                </span>
+              )}
+            </button>
           </div>
 
           {activeTab === 'catalog' && (
@@ -831,6 +978,15 @@ export default function AdminDashboardPage() {
               className="bg-purple-600 hover:bg-purple-500 text-white font-black px-4 py-2 rounded-xl text-xs shadow-lg transition flex items-center justify-center gap-1.5 flex-shrink-0"
             >
               <span>➕</span> Tambah Zona Ongkir
+            </button>
+          )}
+
+          {activeTab === 'promo' && (
+            <button
+              onClick={() => handleOpenPromoModal()}
+              className="bg-amber-600 hover:bg-amber-500 text-white font-black px-4 py-2 rounded-xl text-xs shadow-lg transition flex items-center justify-center gap-1.5 flex-shrink-0"
+            >
+              <span>➕</span> Tambah Kupon Promo
             </button>
           )}
         </div>
@@ -1448,6 +1604,131 @@ export default function AdminDashboardPage() {
             </div>
           </div>
         )}
+
+        {/* TAB 5: MANAJEMEN KUPON & PROMO */}
+        {activeTab === 'promo' && (
+          <div className="space-y-6">
+            {/* Header Promo Banner Card */}
+            <div className="bg-slate-850 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+                <div>
+                  <h2 className="text-base font-black text-white flex items-center gap-2">
+                    <span>🎟️</span> Kelola Voucher Promo & Diskon Belanja
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Buat kode promo hemat, diskon persentase, atau potongan tetap untuk pelanggan dine-in maupun delivery.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-bold text-slate-300">
+                    Kupon Aktif:
+                  </span>
+                  <span className="px-3 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-bold">
+                    {promos.filter(p => p.isActive).length} dari {promos.length} Kupon
+                  </span>
+                  <button
+                    onClick={() => handleOpenPromoModal()}
+                    className="px-3.5 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 shadow"
+                  >
+                    <span>➕</span> Tambah Kupon
+                  </button>
+                </div>
+              </div>
+
+              {/* Info Tips Pajak Resto */}
+              <div className="p-3 bg-emerald-950/30 border border-emerald-800/60 rounded-xl text-xs text-emerald-300 flex items-center gap-2">
+                <span>💡</span>
+                <span>
+                  <strong>Bebas Pajak (0% PB1):</strong> Perhitungan pajak resto 10% sudah dinonaktifkan sesuai kebutuhan wilayah. Promo diskon akan memotong subtotal secara transparan!
+                </span>
+              </div>
+            </div>
+
+            {/* Grid List Voucher Promo */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {promos.map(promo => {
+                const isPercent = promo.type === 'percent';
+                return (
+                  <div
+                    key={promo.id}
+                    className={`bg-slate-800/90 border rounded-2xl p-4 shadow-lg flex flex-col justify-between transition relative overflow-hidden ${
+                      promo.isActive ? 'border-amber-500/40' : 'border-slate-700 opacity-60'
+                    }`}
+                  >
+                    {/* Top Ribbon / Badge */}
+                    <div>
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2.5 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono font-black text-sm rounded-lg tracking-wider">
+                            {promo.code}
+                          </span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase ${
+                            isPercent ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                          }`}>
+                            {isPercent ? 'Diskon %' : 'Potongan Rp'}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => handleTogglePromoActive(promo.id)}
+                          className={`text-[10px] font-black px-2 py-1 rounded-lg transition ${
+                            promo.isActive
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-slate-700 text-slate-300'
+                          }`}
+                        >
+                          {promo.isActive ? '✓ Aktif' : 'Non-Aktif'}
+                        </button>
+                      </div>
+
+                      <h4 className="font-bold text-sm text-white mb-1">{promo.title}</h4>
+                      <p className="text-xs text-slate-300 leading-relaxed mb-3">{promo.description}</p>
+
+                      {/* Detail Nilai Potongan & Syarat */}
+                      <div className="bg-slate-850 p-2.5 rounded-xl border border-slate-750 space-y-1 text-xs">
+                        <div className="flex justify-between text-slate-300">
+                          <span>Nilai Diskon:</span>
+                          <span className="font-bold text-amber-400">
+                            {isPercent ? `${promo.value}%` : toIdr(promo.value)}
+                          </span>
+                        </div>
+                        {promo.minOrder ? (
+                          <div className="flex justify-between text-slate-400 text-[11px]">
+                            <span>Min. Belanja:</span>
+                            <span className="font-medium text-slate-200">{toIdr(promo.minOrder)}</span>
+                          </div>
+                        ) : null}
+                        {isPercent && promo.maxDiscount ? (
+                          <div className="flex justify-between text-slate-400 text-[11px]">
+                            <span>Maks. Potongan:</span>
+                            <span className="font-medium text-slate-200">{toIdr(promo.maxDiscount)}</span>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    {/* Bottom Actions */}
+                    <div className="mt-4 pt-3 border-t border-slate-750 flex items-center justify-between">
+                      <button
+                        onClick={() => handleDeletePromo(promo.id)}
+                        className="text-xs text-rose-400 hover:text-rose-300 font-bold transition flex items-center gap-1"
+                      >
+                        🗑️ Hapus
+                      </button>
+
+                      <button
+                        onClick={() => handleOpenPromoModal(promo)}
+                        className="px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg text-xs font-bold transition flex items-center gap-1"
+                      >
+                        ✏️ Edit Promo
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </main>
 
       {/* MODAL TAMBAH MENU BARU */}
@@ -2037,6 +2318,148 @@ export default function AdminDashboardPage() {
                 <button
                   type="button"
                   onClick={() => setIsStoreModalOpen(false)}
+                  className="px-4 bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold py-2.5 rounded-xl text-xs transition"
+                >
+                  Batal
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL TAMBAH / EDIT KUPON PROMO */}
+      {isPromoModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-slate-850 border border-slate-700 text-white rounded-2xl max-w-md w-full p-6 shadow-2xl relative my-8">
+            <h2 className="text-lg font-black text-white flex items-center gap-2 mb-1">
+              <span>🎟️</span> {editingPromo ? 'Edit Kupon Promo' : 'Tambah Kupon Promo Baru'}
+            </h2>
+            <p className="text-xs text-slate-400 mb-4">
+              {editingPromo ? 'Perbarui informasi dan ketentuan kupon promo.' : 'Kupon baru langsung dapat digunakan oleh pelanggan saat checkout.'}
+            </p>
+
+            <form onSubmit={handleSavePromo} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Kode Promo / Kupon *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: DISKONJUMAT"
+                  value={promoCode}
+                  onChange={e => setPromoCode(e.target.value.toUpperCase())}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 font-mono uppercase tracking-wider font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Judul / Nama Promo *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: Diskon Jumat Berkah 15%"
+                  value={promoTitle}
+                  onChange={e => setPromoTitle(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">Tipe Potongan *</label>
+                  <select
+                    value={promoType}
+                    onChange={e => setPromoType(e.target.value as 'fixed' | 'percent')}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 font-medium"
+                  >
+                    <option value="fixed">Nominal Tetap (Rp)</option>
+                    <option value="percent">Persentase (%)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    {promoType === 'percent' ? 'Besar Diskon (%) *' : 'Nominal Potongan (Rp) *'}
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min={1}
+                    max={promoType === 'percent' ? 100 : undefined}
+                    placeholder={promoType === 'percent' ? 'Contoh: 10' : 'Contoh: 5000'}
+                    value={promoValue}
+                    onChange={e => setPromoValue(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">Min. Belanja (Rp)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="Contoh: 25000"
+                    value={promoMinOrder}
+                    onChange={e => setPromoMinOrder(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 font-mono"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">0 jika tanpa minimal</span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">Maks. Potongan (Rp)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    disabled={promoType !== 'percent'}
+                    placeholder={promoType === 'percent' ? 'Contoh: 10000' : 'Hanya untuk %'}
+                    value={promoMaxDiscount}
+                    onChange={e => setPromoMaxDiscount(e.target.value)}
+                    className={`w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 font-mono ${
+                      promoType !== 'percent' ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">Khusus tipe persentase</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Deskripsi & Syarat Ketentuan</label>
+                <textarea
+                  rows={2}
+                  placeholder="Contoh: Diskon 10% maksimal potongan Rp 8.000 dengan minimal order Rp 35.000"
+                  value={promoDesc}
+                  onChange={e => setPromoDesc(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="promoActiveCheck"
+                  checked={promoActive}
+                  onChange={e => setPromoActive(e.target.checked)}
+                  className="w-4 h-4 rounded text-amber-600 bg-slate-750 border-slate-600 focus:ring-amber-500"
+                />
+                <label htmlFor="promoActiveCheck" className="text-xs text-slate-300 font-bold cursor-pointer">
+                  Kupon Promo Langsung Aktif
+                </label>
+              </div>
+
+              <div className="pt-3 flex gap-2">
+                <button
+                  type="submit"
+                  disabled={isSavingPromo}
+                  className="flex-1 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-bold py-2.5 rounded-xl text-xs shadow transition"
+                >
+                  {isSavingPromo ? 'Menyimpan...' : (editingPromo ? 'Simpan Perubahan' : 'Tambah Kupon')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsPromoModalOpen(false)}
                   className="px-4 bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold py-2.5 rounded-xl text-xs transition"
                 >
                   Batal

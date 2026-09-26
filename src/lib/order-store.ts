@@ -90,14 +90,17 @@ export function createOrder(payload: {
   items: CartItem[];
   paymentMethod: PaymentMethod;
   isPaid?: boolean;
+  discountCode?: string;
+  discountAmount?: number;
 }): Order {
   ensureDataDir();
   const orders = getAllOrders();
 
   const subtotal = payload.items.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0);
-  const tax = Math.round(subtotal * 0.1); // PB1 10%
+  const tax = 0; // Bebas Pajak Resto (Tanpa PB1)
+  const discountAmount = Math.max(0, payload.discountAmount || 0);
   const deliveryFee = payload.orderType === 'delivery' ? (payload.deliveryFee || 0) : 0;
-  const total = subtotal + tax + deliveryFee;
+  const total = Math.max(0, subtotal - discountAmount + deliveryFee);
 
   const orderSeq = (orders.length + 1).toString().padStart(3, '0');
   const now = new Date().toISOString();
@@ -134,7 +137,9 @@ export function createOrder(payload: {
     pickupTime: payload.pickupTime?.trim(),
     items: payload.items,
     subtotal,
-    tax,
+    tax: 0,
+    discountCode: payload.discountCode?.trim() || undefined,
+    discountAmount,
     total,
     paymentMethod: payload.paymentMethod,
     isPaid: payload.isPaid ?? (payload.paymentMethod === 'qris'),

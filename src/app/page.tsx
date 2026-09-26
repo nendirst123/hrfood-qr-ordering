@@ -22,7 +22,10 @@ import {
   MapPin,
   Phone,
   HelpCircle,
-  FileText
+  FileText,
+  Tag,
+  Gift,
+  Percent
 } from 'lucide-react';
 import { MENU_ITEMS, CATEGORIES } from '@/data/menu';
 import { 
@@ -33,7 +36,8 @@ import {
   OrderType, 
   DeliverySettings, 
   DeliveryZone,
-  StoreConfig
+  StoreConfig,
+  PromoCode
 } from '@/types/order';
 
 function OrderingAppContent() {
@@ -49,6 +53,13 @@ function OrderingAppContent() {
 
   // State Store Status (Buka / Tutup)
   const [storeConfig, setStoreConfig] = useState<StoreConfig | null>(null);
+
+  // State Kupon Diskon Promo
+  const [promos, setPromos] = useState<PromoCode[]>([]);
+  const [appliedPromo, setAppliedPromo] = useState<PromoCode | null>(null);
+  const [promoInput, setPromoInput] = useState<string>('');
+  const [promoMessage, setPromoMessage] = useState<{ text: string; isError: boolean } | null>(null);
+  const [showPromoList, setShowPromoList] = useState<boolean>(false);
 
   // State Meja (Dine-in)
   const [tableNumber, setTableNumber] = useState<string>(tableParam || '01');
@@ -128,6 +139,22 @@ function OrderingAppContent() {
     fetchStore();
     const interval = setInterval(fetchStore, 15000);
     return () => clearInterval(interval);
+  }, []);
+
+  // Fetch Kupon Promo Aktif
+  useEffect(() => {
+    const fetchPromos = async () => {
+      try {
+        const res = await fetch('/api/promos');
+        const data = await res.json();
+        if (data.success && Array.isArray(data.data)) {
+          setPromos(data.data);
+        }
+      } catch (err) {
+        console.error('Failed fetching promos:', err);
+      }
+    };
+    fetchPromos();
   }, []);
 
   // Dynamic Menu Availability State
@@ -232,12 +259,22 @@ function OrderingAppContent() {
     });
   };
 
-  // Perhitungan Cart
+  // Perhitungan Cart (Bebas Pajak PB1 + Promo Diskon)
   const cartSubtotal = useMemo(() => {
     return cart.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0);
   }, [cart]);
 
-  const cartTax = Math.round(cartSubtotal * 0.1); // PB1 10%
+  // Kalkulasi Diskon Kupon Promo
+  const discountAmount = useMemo(() => {
+    if (!appliedPromo) return 0;
+    if (cartSubtotal < (appliedPromo.minOrder || 0)) return 0;
+    if (appliedPromo.type === 'percent') {
+      const calc = Math.round((cartSubtotal * appliedPromo.value) / 100);
+      return appliedPromo.maxDiscount ? Math.min(calc, appliedPromo.maxDiscount) : calc;
+    }
+    return Math.min(appliedPromo.value, cartSubtotal);
+  }, [appliedPromo, cartSubtotal]);
+
   const currentDeliveryFee = useMemo(() => {
     if (orderType !== 'delivery') return 0;
     if (deliverySettings?.freeDeliveryThreshold && cartSubtotal >= deliverySettings.freeDeliveryThreshold) {
@@ -246,8 +283,45 @@ function OrderingAppContent() {
     return selectedZone?.fee || 0;
   }, [orderType, deliverySettings, cartSubtotal, selectedZone]);
 
-  const cartTotal = cartSubtotal + cartTax + currentDeliveryFee;
+  const cartTotal = Math.max(0, cartSubtotal - discountAmount + currentDeliveryFee);
   const totalItemCount = cart.reduce((acc, item) => acc + item.quantity, 0);
+
+  // Handler Terapkan Kupon Promo
+  const handleApplyPromoCode = (promoToApply?: PromoCode) => {
+    const code = (promoToApply ? promoToApply.code : promoInput).trim().toUpperCase();
+    if (!code) {
+      setPromoMessage({ text: 'Ketik kode promo terlebih dahulu!', isError: true });
+      return;
+    }
+    const found = promos.find((p) => p.code.toUpperCase() === code && p.isActive);
+    if (!found) {
+      setPromoMessage({ text: 'Kode promo tidak ditemukan atau sudah tidak aktif', isError: true });
+      return;
+    }
+    if (found.minOrder && cartSubtotal < found.minOrder) {
+      setPromoMessage({
+        text: `Minimal belanja Rp ${found.minOrder.toLocaleString('id-ID')} untuk kupon ${found.code}`,
+        isError: true,
+      });
+      return;
+    }
+    setAppliedPromo(found);
+    setPromoInput(found.code);
+    setPromoMessage({
+      text: `Kupon ${found.code} aktif! Hemat Rp ${(
+        found.type === 'percent'
+          ? Math.min(Math.round((cartSubtotal * found.value) / 100), found.maxDiscount || Infinity)
+          : Math.min(found.value, cartSubtotal)
+      ).toLocaleString('id-ID')}`,
+      isError: false,
+    });
+  };
+
+  const handleRemovePromoCode = () => {
+    setAppliedPromo(null);
+    setPromoInput('');
+    setPromoMessage(null);
+  };
 
   // Submit Order
   const handleSubmitOrder = async () => {
@@ -286,6 +360,8 @@ function OrderingAppContent() {
         customerPhone: customerPhone.trim() || undefined,
         items: cart,
         paymentMethod,
+        discountCode: appliedPromo?.code,
+        discountAmount: discountAmount > 0 ? discountAmount : undefined,
       };
 
       if (orderType === 'delivery') {
@@ -307,6 +383,9 @@ function OrderingAppContent() {
       const data = await res.json();
       if (data.success && data.data) {
         setCart([]);
+        setAppliedPromo(null);
+        setPromoInput('');
+        setPromoMessage(null);
         setIsCartOpen(false);
         router.push(`/order/${data.data.id}`);
       } else {
@@ -1007,6 +1086,145 @@ function OrderingAppContent() {
                 )}
               </div>
 
+              {/* Voucher & Promo Diskon */}
+              <div className="border-t border-slate-100 pt-3">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                    <Tag className="w-4 h-4 text-rose-600" />
+                    <span>Voucher Diskon & Promo</span>
+                  </div>
+                  {promos.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowPromoList(!showPromoList)}
+                      className="text-[11px] text-rose-600 font-semibold hover:underline"
+                    >
+                      {showPromoList ? 'Tutup Pilihan' : 'Pilih Kupon'}
+                    </button>
+                  )}
+                </div>
+
+                {/* Input Kode Promo Manual */}
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      value={promoInput}
+                      onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
+                      placeholder="Masukkan kode kupon"
+                      className="w-full px-3 py-2 uppercase border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-rose-500 font-mono tracking-wider"
+                    />
+                    {appliedPromo && (
+                      <span className="absolute right-2.5 top-2.5 w-2 h-2 rounded-full bg-emerald-500"></span>
+                    )}
+                  </div>
+                  {appliedPromo ? (
+                    <button
+                      type="button"
+                      onClick={handleRemovePromoCode}
+                      className="px-3 py-2 bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold hover:bg-slate-300 transition"
+                    >
+                      Hapus
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleApplyPromoCode()}
+                      className="px-4 py-2 bg-rose-600 text-white rounded-xl text-xs font-bold hover:bg-rose-700 transition shadow-sm"
+                    >
+                      Pakai
+                    </button>
+                  )}
+                </div>
+
+                {/* Promo Message */}
+                {promoMessage && (
+                  <p className={`text-[11px] mt-1.5 font-medium ${promoMessage.isError ? 'text-rose-600' : 'text-emerald-600'}`}>
+                    {promoMessage.text}
+                  </p>
+                )}
+
+                {/* Active Applied Promo Banner */}
+                {appliedPromo && (
+                  <div className="mt-2.5 p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Gift className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-emerald-800 font-mono">{appliedPromo.code}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 bg-emerald-200 text-emerald-900 rounded font-semibold">Aktif</span>
+                        </div>
+                        <p className="text-[10px] text-emerald-700">{appliedPromo.title}</p>
+                      </div>
+                    </div>
+                    <span className="text-xs font-extrabold text-emerald-700 whitespace-nowrap">
+                      -Rp {discountAmount.toLocaleString('id-ID')}
+                    </span>
+                  </div>
+                )}
+
+                {/* Quick Claimable Promo List */}
+                {showPromoList && promos.length > 0 && (
+                  <div className="mt-2.5 space-y-2 border border-slate-200 rounded-2xl p-2.5 bg-slate-50/80 max-h-48 overflow-y-auto">
+                    <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">Kupon Tersedia:</p>
+                    {promos.filter(p => p.isActive).map((p) => {
+                      const isEligible = cartSubtotal >= (p.minOrder || 0);
+                      const isSelected = appliedPromo?.code === p.code;
+                      return (
+                        <div
+                          key={p.id}
+                          className={`p-2 rounded-xl border transition flex items-center justify-between gap-2 ${
+                            isSelected
+                              ? 'bg-emerald-50 border-emerald-300'
+                              : isEligible
+                              ? 'bg-white border-slate-200 hover:border-rose-300'
+                              : 'bg-slate-100 border-slate-200 opacity-60'
+                          }`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-bold text-slate-900 font-mono bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                {p.code}
+                              </span>
+                              <span className="text-[11px] font-semibold text-rose-600 truncate">
+                                {p.type === 'percent' ? `Diskon ${p.value}%` : `Hemat Rp ${p.value.toLocaleString('id-ID')}`}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-slate-500 mt-0.5 line-clamp-1">
+                              {p.description}
+                            </p>
+                          </div>
+                          <div>
+                            {isSelected ? (
+                              <button
+                                type="button"
+                                onClick={handleRemovePromoCode}
+                                className="px-2.5 py-1 text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded-lg"
+                              >
+                                Batal
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={!isEligible}
+                                onClick={() => handleApplyPromoCode(p)}
+                                className={`px-2.5 py-1 text-[11px] font-bold rounded-lg ${
+                                  isEligible
+                                    ? 'bg-rose-600 text-white hover:bg-rose-700'
+                                    : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                }`}
+                              >
+                                {isEligible ? 'Pakai' : 'Min. Order'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
               {/* Pilihan Metode Bayar */}
               <div className="border-t border-slate-100 pt-3">
                 <label className="block text-xs font-bold text-slate-800 mb-2">
@@ -1059,10 +1277,14 @@ function OrderingAppContent() {
                   <span>Subtotal Pesanan</span>
                   <span>Rp {cartSubtotal.toLocaleString('id-ID')}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span>Pajak Resto (PB1 10%)</span>
-                  <span>Rp {cartTax.toLocaleString('id-ID')}</span>
-                </div>
+                {appliedPromo && discountAmount > 0 && (
+                  <div className="flex justify-between text-emerald-600 font-bold">
+                    <span className="flex items-center gap-1">
+                      <Tag className="w-3.5 h-3.5" /> Diskon Kupon ({appliedPromo.code})
+                    </span>
+                    <span>-Rp {discountAmount.toLocaleString('id-ID')}</span>
+                  </div>
+                )}
                 {orderType === 'delivery' && (
                   <div className="flex justify-between text-purple-700 font-medium">
                     <span>Ongkos Kirim ({selectedZone?.name || 'Area'})</span>
@@ -1078,6 +1300,10 @@ function OrderingAppContent() {
                 <div className="flex justify-between font-extrabold text-sm text-slate-900 pt-1 border-t border-slate-200">
                   <span>Total Tagihan</span>
                   <span className="text-rose-600">Rp {cartTotal.toLocaleString('id-ID')}</span>
+                </div>
+                <div className="pt-1 flex items-center justify-between text-[10px] text-slate-400">
+                  <span>Harga sudah bersih / netto</span>
+                  <span className="font-semibold text-emerald-600">Bebas Pajak Resto (0% PB1)</span>
                 </div>
               </div>
             </div>

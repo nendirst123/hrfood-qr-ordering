@@ -1,0 +1,43 @@
+[
+  {
+    "id": "promo-1",
+    "code": "HEMAT5K",
+    "title": "Potongan Hemat Rp 5.000",
+    "type": "fixed",
+    "value": 5000,
+    "minOrder": 25000,
+    "description": "Potongan langsung Rp 5.000 untuk belanja minimal Rp 25.000",
+    "isActive": true
+  },
+  {
+    "id": "promo-2",
+    "code": "DISKON10",
+    "title": "Diskon 10% Spesial",
+    "type": "percent",
+    "value": 10,
+    "minOrder": 35000,
+    "maxDiscount": 8000,
+    "description": "Diskon 10% (maksimal potongan Rp 8.000) minimal order Rp 35.000",
+    "isActive": true
+  },
+  {
+    "id": "promo-3",
+    "code": "GRATISONGKIR",
+    "title": "Subsidi Ongkir Rp 5.000",
+    "type": "fixed",
+    "value": 5000,
+    "minOrder": 30000,
+    "description": "Potongan ongkos kirim Rp 5.000 khusus pesanan delivery",
+    "isActive": true
+  },
+  {
+    "id": "promo-4",
+    "code": "WARGABARU",
+    "title": "Promo Pengunjung Baru Rp 3.000",
+    "type": "fixed",
+    "value": 3000,
+    "minOrder": 15000,
+    "description": "Potongan Rp 3.000 untuk pelanggan baru HR Food",
+    "isActive": true
+  }
+]

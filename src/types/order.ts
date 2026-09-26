@@ -73,13 +73,27 @@ export interface Order {
   pickupTime?: string; // untuk takeaway
   items: CartItem[];
   subtotal: number;
-  tax: number; // 10% PB1
+  tax?: number; // Opsional / 0 (Tanpa pajak PB1)
+  discountCode?: string;
+  discountAmount?: number;
   total: number;
   paymentMethod: PaymentMethod;
   isPaid: boolean;
   status: OrderStatus;
   createdAt: string; // ISO String
   updatedAt: string;
+}
+
+export interface PromoCode {
+  id: string;
+  code: string;
+  title: string;
+  type: 'fixed' | 'percent';
+  value: number;
+  minOrder: number;
+  maxDiscount?: number;
+  description?: string;
+  isActive: boolean;
 }
 
 export interface StoreConfig {

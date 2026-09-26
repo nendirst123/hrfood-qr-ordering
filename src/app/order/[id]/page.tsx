@@ -395,10 +395,12 @@ export default function OrderTrackingPage() {
               <span>Subtotal</span>
               <span>Rp {order.subtotal.toLocaleString('id-ID')}</span>
             </div>
-            <div className="flex justify-between">
-              <span>Pajak Resto (PB1 10%)</span>
-              <span>Rp {order.tax.toLocaleString('id-ID')}</span>
-            </div>
+            {!!order.discountAmount && order.discountAmount > 0 && (
+              <div className="flex justify-between text-emerald-700 font-semibold">
+                <span>Diskon Kupon {order.discountCode ? `(${order.discountCode})` : ''}</span>
+                <span>- Rp {order.discountAmount.toLocaleString('id-ID')}</span>
+              </div>
+            )}
             {orderType === 'delivery' && (
               <div className="flex justify-between text-purple-700 font-medium">
                 <span>Ongkir ({order.deliveryZoneName || 'Pengantaran'})</span>

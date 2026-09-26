@@ -185,10 +185,12 @@ export default function ThermalReceiptModal({ order, onClose }: ThermalReceiptMo
                     <span>Subtotal:</span>
                     <span>Rp {order.subtotal.toLocaleString('id-ID')}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Pajak (PB1 10%):</span>
-                    <span>Rp {order.tax.toLocaleString('id-ID')}</span>
-                  </div>
+                  {!!order.discountAmount && order.discountAmount > 0 && (
+                    <div className="flex justify-between font-semibold text-rose-700">
+                      <span>Diskon {order.discountCode ? `(${order.discountCode})` : 'Promo'}:</span>
+                      <span>- Rp {order.discountAmount.toLocaleString('id-ID')}</span>
+                    </div>
+                  )}
                   {orderType === 'delivery' && (
                     <div className="flex justify-between">
                       <span>Ongkos Kirim:</span>

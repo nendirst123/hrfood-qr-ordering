@@ -42,6 +42,8 @@ export async function POST(request: NextRequest) {
       items,
       paymentMethod = 'cashier',
       isPaid,
+      discountCode,
+      discountAmount = 0,
     } = body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -95,6 +97,8 @@ export async function POST(request: NextRequest) {
       items,
       paymentMethod,
       isPaid,
+      discountCode,
+      discountAmount: Number(discountAmount) || 0,
     });
 
     return NextResponse.json({ success: true, data: newOrder }, { status: 201 });
