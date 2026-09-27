@@ -1138,17 +1138,17 @@ export default function AdminDashboardPage() {
         {activeTab === 'analytics' && (
           <div className="space-y-4 sm:space-y-6">
             {/* Filter Hari & Aksi Cepat (CSV Export & Reset Sesi) */}
-            <div className="bg-slate-850 border border-slate-800 rounded-2xl p-3 sm:p-4 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 sm:p-4 shadow-sm dark:shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-3">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                   <span>📅</span> Filter Laporan:
                 </span>
 
-                <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs font-bold">
+                <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-bold">
                   <button
                     onClick={() => { setReportDate('today'); setCustomReportDate(''); }}
                     className={`px-3 py-1 rounded-lg transition ${
-                      reportDate === 'today' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                      reportDate === 'today' ? 'bg-emerald-600 text-white shadow' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                     }`}
                   >
                     🟢 Hari Ini
@@ -1157,7 +1157,7 @@ export default function AdminDashboardPage() {
                   <button
                     onClick={() => { setReportDate('yesterday'); setCustomReportDate(''); }}
                     className={`px-3 py-1 rounded-lg transition ${
-                      reportDate === 'yesterday' ? 'bg-amber-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                      reportDate === 'yesterday' ? 'bg-amber-600 text-white shadow' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                     }`}
                   >
                     🟡 Kemarin
@@ -1166,7 +1166,7 @@ export default function AdminDashboardPage() {
                   <button
                     onClick={() => { setReportDate('all'); setCustomReportDate(''); }}
                     className={`px-3 py-1 rounded-lg transition ${
-                      reportDate === 'all' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                      reportDate === 'all' ? 'bg-blue-600 text-white shadow' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                     }`}
                   >
                     🌐 Semua
@@ -1180,7 +1180,7 @@ export default function AdminDashboardPage() {
                     setCustomReportDate(e.target.value);
                     setReportDate(e.target.value ? 'custom' : 'today');
                   }}
-                  className="bg-slate-900 border border-slate-800 rounded-xl px-2.5 py-1 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono"
+                  className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-1 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-amber-500 font-mono shadow-sm"
                   title="Pilih tanggal laporan tertentu"
                 />
               </div>
@@ -1196,7 +1196,7 @@ export default function AdminDashboardPage() {
 
                 <button
                   onClick={() => setIsResetModalOpen(true)}
-                  className="flex-1 md:flex-none px-3.5 py-1.5 bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-800/80 font-bold text-xs rounded-xl shadow transition flex items-center justify-center gap-1.5 active:scale-95"
+                  className="flex-1 md:flex-none px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/80 dark:hover:bg-rose-900 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/80 font-bold text-xs rounded-xl shadow transition flex items-center justify-center gap-1.5 active:scale-95"
                   title="Reset Semua Pesanan & Mulai dari ORD-001"
                 >
                   <span>🔄</span> Reset Sesi (Mulai dari 0)
@@ -1205,15 +1205,15 @@ export default function AdminDashboardPage() {
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2 space-y-6">
-                <div className="bg-slate-850 border border-slate-800 rounded-2xl p-6 shadow-xl">
+                <div className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm dark:shadow-xl">
                   <div className="flex items-center justify-between mb-4">
                     <div>
-                      <h2 className="text-base font-black text-white flex items-center gap-2">
+                      <h2 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
                         <span>🏆</span> Peringkat Menu Terlaris Hari Ini
                       </h2>
-                      <p className="text-xs text-slate-400">Berdasarkan jumlah porsi yang dipesan pelanggan</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">Berdasarkan jumlah porsi yang dipesan pelanggan</p>
                     </div>
-                    <span className="text-xs font-mono bg-slate-800 text-slate-300 px-2.5 py-1 rounded-lg">
+                    <span className="text-xs font-mono bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700">
                       Top Best Seller
                     </span>
                   </div>
@@ -1224,27 +1224,27 @@ export default function AdminDashboardPage() {
                         const maxQty = report.topItems[0].qty || 1;
                         const pct = Math.round((item.qty / maxQty) * 100);
                         return (
-                          <div key={idx} className="bg-slate-800/70 border border-slate-750 p-3 rounded-xl flex items-center gap-3.5">
+                          <div key={idx} className="bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-750 p-3 rounded-xl flex items-center gap-3.5">
                             <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-black text-xs ${
                               idx === 0 ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-500/20' :
                               idx === 1 ? 'bg-slate-300 text-slate-900' :
                               idx === 2 ? 'bg-amber-700 text-white' :
-                              'bg-slate-700 text-slate-300'
+                              'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
                             }`}>
                               {idx + 1}
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex justify-between items-center mb-1">
-                                <h3 className="font-bold text-sm text-white truncate">{item.name}</h3>
-                                <span className="text-xs font-bold text-emerald-400">{toIdr(item.revenue)}</span>
+                                <h3 className="font-bold text-sm text-slate-900 dark:text-white truncate">{item.name}</h3>
+                                <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">{toIdr(item.revenue)}</span>
                               </div>
-                              <div className="w-full bg-slate-700 rounded-full h-2 overflow-hidden">
+                              <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
                                 <div className="bg-red-500 h-full rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
                               </div>
                             </div>
                             <div className="text-right pl-2">
-                              <span className="font-black text-sm text-amber-400">{item.qty}</span>
-                              <span className="text-[10px] text-slate-400 block">Porsi</span>
+                              <span className="font-black text-sm text-amber-600 dark:text-amber-400">{item.qty}</span>
+                              <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Porsi</span>
                             </div>
                           </div>
                         );
@@ -1257,44 +1257,44 @@ export default function AdminDashboardPage() {
                   )}
                 </div>
 
-                <div className="bg-slate-850 border border-slate-800 rounded-2xl p-6 shadow-xl">
-                  <h2 className="text-base font-black text-white flex items-center gap-2 mb-1">
+                <div className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm dark:shadow-xl">
+                  <h2 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2 mb-1">
                     <span>🌶️</span> Statistik Pilihan Sambal Tamu
                   </h2>
-                  <p className="text-xs text-slate-400 mb-4">Varian sambal khas HR Food yang paling digemari</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">Varian sambal khas HR Food yang paling digemari</p>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="bg-red-950/40 border border-red-800/60 p-4 rounded-xl text-center">
+                    <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/60 p-4 rounded-xl text-center">
                       <span className="text-2xl mb-1 block">🌶️</span>
-                      <h3 className="font-bold text-xs text-red-300">Sambal Terasi</h3>
-                      <p className="text-2xl font-black text-white mt-1">{report?.sambalStats['Sambal Terasi'] || 0}</p>
-                      <span className="text-[10px] text-red-400">Paling Klasik & Nagih</span>
+                      <h3 className="font-bold text-xs text-red-700 dark:text-red-300">Sambal Terasi</h3>
+                      <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">{report?.sambalStats['Sambal Terasi'] || 0}</p>
+                      <span className="text-[10px] text-red-600 dark:text-red-400 font-medium">Paling Klasik & Nagih</span>
                     </div>
 
-                    <div className="bg-amber-950/40 border border-amber-800/60 p-4 rounded-xl text-center">
+                    <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 p-4 rounded-xl text-center">
                       <span className="text-2xl mb-1 block">🧄</span>
-                      <h3 className="font-bold text-xs text-amber-300">Sambal Bawang</h3>
-                      <p className="text-2xl font-black text-white mt-1">{report?.sambalStats['Sambal Bawang'] || 0}</p>
-                      <span className="text-[10px] text-amber-400">Segar & Gurih</span>
+                      <h3 className="font-bold text-xs text-amber-700 dark:text-amber-300">Sambal Bawang</h3>
+                      <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">{report?.sambalStats['Sambal Bawang'] || 0}</p>
+                      <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">Segar & Gurih</span>
                     </div>
 
-                    <div className="bg-emerald-950/40 border border-emerald-800/60 p-4 rounded-xl text-center">
+                    <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 p-4 rounded-xl text-center">
                       <span className="text-2xl mb-1 block">🟢</span>
-                      <h3 className="font-bold text-xs text-emerald-300">Sambal Cabe Ijo</h3>
-                      <p className="text-2xl font-black text-white mt-1">{report?.sambalStats['Sambal Cabe Ijo'] || 0}</p>
-                      <span className="text-[10px] text-emerald-400">Pedas Mantap</span>
+                      <h3 className="font-bold text-xs text-emerald-700 dark:text-emerald-300">Sambal Cabe Ijo</h3>
+                      <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">{report?.sambalStats['Sambal Cabe Ijo'] || 0}</p>
+                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">Pedas Mantap</span>
                     </div>
                   </div>
                 </div>
               </div>
 
               {/* List Transaksi Kasir Hari Ini */}
-              <div className="bg-slate-850 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col h-full">
+              <div className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm dark:shadow-xl flex flex-col h-full">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-base font-black text-white flex items-center gap-2">
+                  <h2 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
                     <span>⏱️</span> Transaksi Hari Ini
                   </h2>
-                  <span className="text-xs text-slate-400 font-mono">
+                  <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
                     {report?.recentOrders?.length || 0} Order
                   </span>
                 </div>
