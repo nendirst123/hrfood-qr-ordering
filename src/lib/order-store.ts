@@ -84,6 +84,7 @@ export function createOrder(payload: {
   deliveryNotes?: string;
   deliveryZoneId?: string;
   deliveryZoneName?: string;
+  deliveryDistanceKm?: number;
   deliveryFee?: number;
   pickupTime?: string;
   orderType?: OrderType;
@@ -133,6 +134,7 @@ export function createOrder(payload: {
     deliveryNotes: payload.deliveryNotes?.trim(),
     deliveryZoneId: payload.deliveryZoneId,
     deliveryZoneName: payload.deliveryZoneName,
+    deliveryDistanceKm: payload.deliveryDistanceKm,
     deliveryFee,
     pickupTime: payload.pickupTime?.trim(),
     items: payload.items,

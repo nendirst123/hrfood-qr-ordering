@@ -69,6 +69,7 @@ export interface Order {
   deliveryNotes?: string; // patokan rumah / instruksi kurir
   deliveryZoneId?: string;
   deliveryZoneName?: string;
+  deliveryDistanceKm?: number; // Jarak pengantaran dalam KM
   deliveryFee?: number; // ongkos kirim
   pickupTime?: string; // untuk takeaway
   items: CartItem[];

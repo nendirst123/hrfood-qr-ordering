@@ -5,9 +5,10 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { RESTAURANT_INFO, CATEGORIES } from '@/data/menu';
 import { MenuItem, Order, DeliverySettings, DeliveryZone, StoreConfig, PromoCode } from '@/types/order';
-import { playNewOrderChime } from '@/lib/audio-chime';
+import { playNewOrderChime, startOrderRinging, stopOrderRinging, isOrderRinging } from '@/lib/audio-chime';
 import { generateCustomerWhatsAppUrl, generateCourierWhatsAppUrl } from '@/lib/whatsapp-helper';
 import ThermalReceiptModal from '@/components/ThermalReceiptModal';
+import { ThemeToggle } from '@/components/ThemeProvider';
 import { Bell, Volume2, VolumeX, Store, Clock, Power } from 'lucide-react';
 
 interface ReportData {
@@ -52,9 +53,27 @@ export default function AdminDashboardPage() {
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [printingOrder, setPrintingOrder] = useState<Order | null>(null);
 
-  // Audio Bell State
+  // Audio Bell State (30s Continuous Loop & Stop Control)
   const [audioEnabled, setAudioEnabled] = useState(true);
+  const [isBellRinging, setIsBellRinging] = useState(false);
   const prevOrderCountRef = useRef(0);
+  const bellTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleToggleBellTest = () => {
+    if (isBellRinging) {
+      stopOrderRinging();
+      setIsBellRinging(false);
+      if (bellTimeoutRef.current) clearTimeout(bellTimeoutRef.current);
+    } else {
+      setAudioEnabled(true);
+      startOrderRinging(30);
+      setIsBellRinging(true);
+      if (bellTimeoutRef.current) clearTimeout(bellTimeoutRef.current);
+      bellTimeoutRef.current = setTimeout(() => {
+        setIsBellRinging(false);
+      }, 30000);
+    }
+  };
 
   // Store Configuration State (Buka / Tutup & Jam Operasional)
   const [storeConfig, setStoreConfig] = useState<StoreConfig | null>(null);
@@ -127,7 +146,12 @@ export default function AdminDashboardPage() {
         setReport(dataReport.data);
         if (prevOrderCountRef.current > 0 && dataReport.data.totalOrders > prevOrderCountRef.current) {
           if (audioEnabled) {
-            playNewOrderChime();
+            startOrderRinging(30);
+            setIsBellRinging(true);
+            if (bellTimeoutRef.current) clearTimeout(bellTimeoutRef.current);
+            bellTimeoutRef.current = setTimeout(() => {
+              setIsBellRinging(false);
+            }, 30000);
           }
         }
         prevOrderCountRef.current = dataReport.data.totalOrders;
@@ -732,6 +756,38 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 font-sans pb-16">
+      {/* 30-Second Ringing Bell Alert Banner */}
+      {isBellRinging && (
+        <div className="bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 text-white px-3 sm:px-6 py-2.5 flex items-center justify-between sticky top-0 z-50 shadow-xl border-b border-red-400 animate-pulse">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-xl animate-bounce">🔔</span>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs font-black uppercase tracking-wider text-white">
+                  PESANAN BARU MASUK! LONCENG BERDERING (30 DETIK)
+                </span>
+                <span className="px-1.5 py-0.5 bg-black/30 text-amber-300 text-[10px] font-black rounded-md">
+                  Kring-Kring-Kring...
+                </span>
+              </div>
+              <p className="text-[11px] text-red-100 hidden sm:block truncate">
+                Lonceng berbunyi terus menerus selama 30 detik untuk memastikan kasir & koki mendengar.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              stopOrderRinging();
+              setIsBellRinging(false);
+              if (bellTimeoutRef.current) clearTimeout(bellTimeoutRef.current);
+            }}
+            className="px-3 py-1.5 bg-white hover:bg-red-50 text-red-700 rounded-xl text-xs font-black shadow-md transition active:scale-95 flex items-center gap-1 flex-shrink-0 ml-2"
+          >
+            <span>🛑 Stop Bel</span>
+          </button>
+        </div>
+      )}
+
       {/* Top Header - Responsive */}
       <header className="bg-slate-850 border-b border-slate-800 sticky top-0 z-30 shadow-md">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2.5 sm:py-3.5 flex flex-wrap items-center justify-between gap-2.5">
@@ -755,6 +811,9 @@ export default function AdminDashboardPage() {
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0 flex-wrap justify-end">
+            {/* Theme Toggle (Light / Dark Mode) */}
+            <ThemeToggle />
+
             {/* Saklar Status Toko */}
             <button
               onClick={() => setIsStoreModalOpen(true)}
@@ -766,7 +825,7 @@ export default function AdminDashboardPage() {
               title="Atur Jam Operasional & Status Buka/Tutup Resto"
             >
               <Store className="w-3.5 h-3.5" />
-              <span>{storeConfig?.isOpen ? '🟢 Toko BUKA' : '🔴 Toko TUTUP'}</span>
+              <span>{storeConfig?.isOpen ? '🟢 BUKA' : '🔴 TUTUP'}</span>
             </button>
 
             {/* Alarm Audio Toggle */}
@@ -783,17 +842,18 @@ export default function AdminDashboardPage() {
               <span className="hidden md:inline">{audioEnabled ? 'Alarm: On' : 'Mute'}</span>
             </button>
 
-            {/* Tes Bell */}
+            {/* Tes Bell (30 Detik Kring-Kring) */}
             <button
-              onClick={() => {
-                setAudioEnabled(true);
-                playNewOrderChime();
-              }}
-              className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-750 text-amber-300 border border-slate-700 transition active:scale-95 shadow-sm"
-              title="Uji Coba Lonceng Kasir (Audio Bell)"
+              onClick={handleToggleBellTest}
+              className={`flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold border transition active:scale-95 shadow-sm ${
+                isBellRinging
+                  ? 'bg-red-600 text-white border-red-500 animate-pulse'
+                  : 'bg-slate-800 hover:bg-slate-750 text-amber-300 border-slate-700'
+              }`}
+              title="Uji Coba Lonceng Kasir 30 Detik (Klik untuk Nyalakan/Matikan)"
             >
-              <Bell className="w-3.5 h-3.5 text-amber-400" />
-              <span className="hidden sm:inline">Tes Bell</span>
+              <Bell className={`w-3.5 h-3.5 ${isBellRinging ? 'animate-bounce text-white' : 'text-amber-400'}`} />
+              <span className="hidden sm:inline">{isBellRinging ? 'Stop Bel' : 'Tes Bel (30s)'}</span>
             </button>
 
             <Link

@@ -32,9 +32,10 @@ import {
   Bell
 } from 'lucide-react';
 import { Order, OrderStatus } from '@/types/order';
-import { playNewOrderChime } from '@/lib/audio-chime';
+import { playNewOrderChime, startOrderRinging, stopOrderRinging, isOrderRinging } from '@/lib/audio-chime';
 import { generateCustomerWhatsAppUrl, generateCourierWhatsAppUrl } from '@/lib/whatsapp-helper';
 import ThermalReceiptModal from '@/components/ThermalReceiptModal';
+import { ThemeToggle } from '@/components/ThemeProvider';
 
 export default function KitchenDashboardPage() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -42,6 +43,7 @@ export default function KitchenDashboardPage() {
   const [dateFilter, setDateFilter] = useState<string>('today'); // 'today' | 'yesterday' | 'all' | 'YYYY-MM-DD'
   const [customDate, setCustomDate] = useState<string>('');
   const [audioEnabled, setAudioEnabled] = useState<boolean>(true);
+  const [isBellRinging, setIsBellRinging] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [printingOrder, setPrintingOrder] = useState<Order | null>(null);
   const [viewMode, setViewMode] = useState<'cards' | 'compact'>('cards');
@@ -51,6 +53,23 @@ export default function KitchenDashboardPage() {
   const [isResetting, setIsResetting] = useState<boolean>(false);
 
   const prevOrderCountRef = useRef<number>(0);
+  const bellTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleToggleBellTest = () => {
+    if (isBellRinging) {
+      stopOrderRinging();
+      setIsBellRinging(false);
+      if (bellTimeoutRef.current) clearTimeout(bellTimeoutRef.current);
+    } else {
+      setAudioEnabled(true);
+      startOrderRinging(30);
+      setIsBellRinging(true);
+      if (bellTimeoutRef.current) clearTimeout(bellTimeoutRef.current);
+      bellTimeoutRef.current = setTimeout(() => {
+        setIsBellRinging(false);
+      }, 30000);
+    }
+  };
 
   // Fetch orders based on date
   const fetchOrders = async () => {
@@ -61,10 +80,15 @@ export default function KitchenDashboardPage() {
       if (data.success && Array.isArray(data.data)) {
         const fetched: Order[] = data.data;
 
-        // Cek jika ada pesanan baru masuk pada filter hari ini
+        // Cek jika ada pesanan baru masuk pada filter hari ini (Bunyikan bel 30 detik)
         if ((dateFilter === 'today' || !dateFilter) && prevOrderCountRef.current > 0 && fetched.length > prevOrderCountRef.current) {
           if (audioEnabled) {
-            playNewOrderChime();
+            startOrderRinging(30);
+            setIsBellRinging(true);
+            if (bellTimeoutRef.current) clearTimeout(bellTimeoutRef.current);
+            bellTimeoutRef.current = setTimeout(() => {
+              setIsBellRinging(false);
+            }, 30000);
           }
         }
         prevOrderCountRef.current = fetched.length;
@@ -187,6 +211,38 @@ export default function KitchenDashboardPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+      {/* 30-Second Ringing Bell Alert Banner for Kitchen Staff */}
+      {isBellRinging && (
+        <div className="bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 text-white px-3 sm:px-6 py-2.5 flex items-center justify-between sticky top-0 z-50 shadow-xl border-b border-red-400 animate-pulse">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-xl animate-bounce">🔔</span>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs font-black uppercase tracking-wider text-white">
+                  PESANAN BARU MASUK KE DAPUR! LONCENG BERDERING (30 DETIK)
+                </span>
+                <span className="px-1.5 py-0.5 bg-black/30 text-amber-300 text-[10px] font-black rounded-md">
+                  Kring-Kring-Kring...
+                </span>
+              </div>
+              <p className="text-[11px] text-red-100 hidden sm:block truncate">
+                Lonceng berdering 30 detik untuk memastikan tim koki segera menyiapkan makanan.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              stopOrderRinging();
+              setIsBellRinging(false);
+              if (bellTimeoutRef.current) clearTimeout(bellTimeoutRef.current);
+            }}
+            className="px-3 py-1.5 bg-white hover:bg-red-50 text-red-700 rounded-xl text-xs font-black shadow-md transition active:scale-95 flex items-center gap-1 flex-shrink-0 ml-2"
+          >
+            <span>🛑 Stop Bel</span>
+          </button>
+        </div>
+      )}
+
       {/* Top Bar Staff Dashboard */}
       <header className="bg-slate-900 border-b border-slate-800 px-3 sm:px-6 py-2.5 sm:py-3.5 sticky top-0 z-30 shadow-md">
         <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -213,6 +269,9 @@ export default function KitchenDashboardPage() {
 
           {/* Quick Action Navigation */}
           <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+            {/* Theme Toggle (Light / Dark Mode) */}
+            <ThemeToggle />
+
             {/* Tombol Reset Pesanan (Mulai dari 0) */}
             <button
               onClick={() => setIsResetModalOpen(true)}
@@ -237,17 +296,18 @@ export default function KitchenDashboardPage() {
               <span className="hidden sm:inline">{audioEnabled ? 'Alarm: On' : 'Alarm: Mute'}</span>
             </button>
 
-            {/* Tombol Tes Bell */}
+            {/* Tombol Tes Bell (30 Detik Kring-Kring) */}
             <button
-              onClick={() => {
-                setAudioEnabled(true);
-                playNewOrderChime();
-              }}
-              className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-750 text-amber-300 border border-slate-700 transition active:scale-95 shadow-sm"
-              title="Uji coba suara lonceng pesanan masuk (Audio Bell)"
+              onClick={handleToggleBellTest}
+              className={`flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold border transition active:scale-95 shadow-sm ${
+                isBellRinging
+                  ? 'bg-red-600 text-white border-red-500 animate-pulse'
+                  : 'bg-slate-800 hover:bg-slate-750 text-amber-300 border-slate-700'
+              }`}
+              title="Uji coba suara lonceng pesanan masuk 30 detik (Klik untuk Start/Stop)"
             >
-              <Bell className="w-3.5 h-3.5 text-amber-400" />
-              <span className="hidden md:inline">Tes Bell</span>
+              <Bell className={`w-3.5 h-3.5 ${isBellRinging ? 'animate-bounce text-white' : 'text-amber-400'}`} />
+              <span className="hidden md:inline">{isBellRinging ? 'Stop Bel' : 'Tes Bel (30s)'}</span>
             </button>
 
             {/* Link POS Kasir & Rekap */}

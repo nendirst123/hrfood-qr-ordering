@@ -25,7 +25,9 @@ import {
   FileText,
   Tag,
   Gift,
-  Percent
+  Percent,
+  Navigation,
+  Compass
 } from 'lucide-react';
 import { MENU_ITEMS, CATEGORIES } from '@/data/menu';
 import { 
@@ -39,6 +41,13 @@ import {
   StoreConfig,
   PromoCode
 } from '@/types/order';
+import { ThemeToggle } from '@/components/ThemeProvider';
+import { 
+  calculateHaversineDistanceKm, 
+  calculateDeliveryFeeFromKm, 
+  LOCAL_VILLAGE_PRESETS, 
+  RESTO_COORDINATES 
+} from '@/lib/geo-distance';
 
 function OrderingAppContent() {
   const router = useRouter();
@@ -66,13 +75,17 @@ function OrderingAppContent() {
   const [isTableModalOpen, setIsTableModalOpen] = useState<boolean>(!tableParam && orderType === 'dine_in');
   const [tempTableInput, setTempTableInput] = useState<string>(tableParam || '01');
 
-  // State Delivery
+  // State Delivery Jarak KM Otomatis & Alamat
   const [deliverySettings, setDeliverySettings] = useState<DeliverySettings | null>(null);
   const [selectedZone, setSelectedZone] = useState<DeliveryZone | null>(null);
   const [deliveryAddress, setDeliveryAddress] = useState<string>('');
   const [deliveryNotes, setDeliveryNotes] = useState<string>('');
   const [customerPhone, setCustomerPhone] = useState<string>('');
   const [pickupTime, setPickupTime] = useState<string>('15-20 Menit Lagi');
+  const [deliveryDistanceKm, setDeliveryDistanceKm] = useState<number>(1.8);
+  const [selectedVillagePresetId, setSelectedVillagePresetId] = useState<string>('preset-sukamaju');
+  const [isDetectingGps, setIsDetectingGps] = useState<boolean>(false);
+  const [locationStatusMsg, setLocationStatusMsg] = useState<{ text: string; isError?: boolean } | null>(null);
 
   // Filter & Search
   const [selectedCategory, setSelectedCategory] = useState<string>('Semua');
@@ -90,6 +103,59 @@ function OrderingAppContent() {
   const [customerName, setCustomerName] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cashier');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  // Handler Deteksi GPS Otomatis
+  const handleDetectGps = () => {
+    if (typeof window === 'undefined' || !navigator.geolocation) {
+      setLocationStatusMsg({
+        text: 'Browser tidak mendukung GPS. Silakan pilih wilayah di bawah.',
+        isError: true,
+      });
+      return;
+    }
+
+    setIsDetectingGps(true);
+    setLocationStatusMsg({ text: 'Sedang membaca titik koordinat GPS Anda...', isError: false });
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const userCoords = {
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+        };
+        const km = calculateHaversineDistanceKm(userCoords, RESTO_COORDINATES);
+        setDeliveryDistanceKm(km);
+        setSelectedVillagePresetId('custom-gps');
+        setIsDetectingGps(false);
+        setLocationStatusMsg({
+          text: `📍 GPS Akurat Terdeteksi! Jarak ke HR Food: ${km} km`,
+          isError: false,
+        });
+      },
+      (err) => {
+        setIsDetectingGps(false);
+        let msg = 'Izin akses GPS belum diaktifkan. Silakan pilih wilayah Anda dari daftar di bawah.';
+        if (err.code === 2) msg = 'Sinyal posisi tidak ditemukan. Silakan pilih wilayah dari daftar.';
+        else if (err.code === 3) msg = 'Waktu deteksi GPS habis. Silakan pilih wilayah dari daftar.';
+        setLocationStatusMsg({ text: msg, isError: true });
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
+  };
+
+  // Handler Pilih Preset Wilayah Sekitar
+  const handleSelectVillagePreset = (presetId: string) => {
+    setSelectedVillagePresetId(presetId);
+    const preset = LOCAL_VILLAGE_PRESETS.find((p) => p.id === presetId);
+    if (preset) {
+      const km = calculateHaversineDistanceKm(preset.coords, RESTO_COORDINATES);
+      setDeliveryDistanceKm(km);
+      setLocationStatusMsg({
+        text: `📍 Terpilih: ${preset.name} (~${km} km dari resto)`,
+        isError: false,
+      });
+    }
+  };
 
   // Sync param table & type
   useEffect(() => {
@@ -275,13 +341,19 @@ function OrderingAppContent() {
     return Math.min(appliedPromo.value, cartSubtotal);
   }, [appliedPromo, cartSubtotal]);
 
+  // Kalkulasi Ongkir Otomatis Berdasarkan Jarak KM
+  const deliveryCalculation = useMemo(() => {
+    return calculateDeliveryFeeFromKm(
+      deliveryDistanceKm || 1.8,
+      cartSubtotal,
+      deliverySettings?.freeDeliveryThreshold
+    );
+  }, [deliveryDistanceKm, cartSubtotal, deliverySettings?.freeDeliveryThreshold]);
+
   const currentDeliveryFee = useMemo(() => {
     if (orderType !== 'delivery') return 0;
-    if (deliverySettings?.freeDeliveryThreshold && cartSubtotal >= deliverySettings.freeDeliveryThreshold) {
-      return 0; // Gratis ongkir jika di atas threshold
-    }
-    return selectedZone?.fee || 0;
-  }, [orderType, deliverySettings, cartSubtotal, selectedZone]);
+    return deliveryCalculation.fee;
+  }, [orderType, deliveryCalculation.fee]);
 
   const cartTotal = Math.max(0, cartSubtotal - discountAmount + currentDeliveryFee);
   const totalItemCount = cart.reduce((acc, item) => acc + item.quantity, 0);
@@ -367,8 +439,8 @@ function OrderingAppContent() {
       if (orderType === 'delivery') {
         payload.deliveryAddress = deliveryAddress.trim();
         payload.deliveryNotes = deliveryNotes.trim() || undefined;
-        payload.deliveryZoneId = selectedZone?.id;
-        payload.deliveryZoneName = selectedZone?.name;
+        payload.deliveryDistanceKm = deliveryDistanceKm || 1.8;
+        payload.deliveryZoneName = deliveryCalculation.zoneName;
         payload.deliveryFee = currentDeliveryFee;
       } else if (orderType === 'takeaway') {
         payload.pickupTime = pickupTime;
@@ -403,9 +475,9 @@ function OrderingAppContent() {
   const isStoreOpen = storeConfig ? ((storeConfig as any).effectiveIsOpen ?? storeConfig.isOpen) : true;
 
   return (
-    <div className="min-h-screen pb-28 max-w-md mx-auto bg-slate-50 relative shadow-xl">
+    <div className="min-h-screen pb-28 max-w-md mx-auto bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 relative shadow-xl transition-colors duration-200">
       {/* Top Header Bar */}
-      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 py-3">
+      <header className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <img 
@@ -415,12 +487,14 @@ function OrderingAppContent() {
             />
           </div>
 
-          {/* Mode Switcher Button (Dine-in / Delivery / Takeaway) */}
-          <div className="flex items-center gap-1">
+          {/* Theme Toggle & Mode Switcher Button */}
+          <div className="flex items-center gap-1.5">
+            <ThemeToggle />
+
             {orderType === 'dine_in' && (
               <button
                 onClick={() => setIsTableModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-50 border border-red-200 text-red-700 text-xs font-semibold hover:bg-red-100 transition shadow-sm"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-xs font-semibold hover:bg-red-100 dark:hover:bg-red-900/50 transition shadow-sm"
               >
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                 Meja {tableNumber.padStart(2, '0')}
@@ -430,9 +504,9 @@ function OrderingAppContent() {
             {orderType === 'delivery' && (
               <button
                 onClick={() => setIsCartOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-50 border border-purple-200 text-purple-700 text-xs font-semibold hover:bg-purple-100 transition shadow-sm"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 text-xs font-semibold hover:bg-purple-100 dark:hover:bg-purple-900/50 transition shadow-sm"
               >
-                <Bike className="w-3.5 h-3.5 text-purple-600" />
+                <Bike className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
                 <span>Pesan Antar</span>
               </button>
             )}
@@ -440,9 +514,9 @@ function OrderingAppContent() {
             {orderType === 'takeaway' && (
               <button
                 onClick={() => setIsCartOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold hover:bg-emerald-100 transition shadow-sm"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-semibold hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition shadow-sm"
               >
-                <Package className="w-3.5 h-3.5 text-emerald-600" />
+                <Package className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                 <span>Bawa Pulang</span>
               </button>
             )}
@@ -450,13 +524,13 @@ function OrderingAppContent() {
         </div>
 
         {/* Order Mode Tab Pill Switcher */}
-        <div className="mt-2.5 p-1 bg-slate-100 rounded-xl grid grid-cols-3 gap-1 text-[11px] font-bold">
+        <div className="mt-2.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl grid grid-cols-3 gap-1 text-[11px] font-bold">
           <button
             onClick={() => setOrderType('dine_in')}
             className={`py-1.5 rounded-lg flex items-center justify-center gap-1 transition ${
               orderType === 'dine_in'
-                ? 'bg-white text-red-700 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
+                ? 'bg-white dark:bg-slate-700 text-red-700 dark:text-red-300 shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             <Utensils className="w-3 h-3" />
@@ -468,7 +542,7 @@ function OrderingAppContent() {
             className={`py-1.5 rounded-lg flex items-center justify-center gap-1 transition ${
               orderType === 'delivery'
                 ? 'bg-purple-600 text-white shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             <Bike className="w-3 h-3" />
@@ -480,7 +554,7 @@ function OrderingAppContent() {
             className={`py-1.5 rounded-lg flex items-center justify-center gap-1 transition ${
               orderType === 'takeaway'
                 ? 'bg-emerald-600 text-white shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             <Package className="w-3 h-3" />
@@ -496,12 +570,12 @@ function OrderingAppContent() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Cari ayam kampung, sate kulit, sambal, lele..."
-            className="w-full pl-9 pr-4 py-2 bg-slate-100/80 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500 focus:bg-white transition"
+            className="w-full pl-9 pr-8 py-2 bg-slate-100/90 dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 border border-transparent dark:border-slate-700 transition"
           />
           {searchQuery && (
             <button 
               onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -511,11 +585,11 @@ function OrderingAppContent() {
 
       {/* Banner Resto Tutup */}
       {!isStoreOpen && (
-        <div className="mx-4 mt-3 p-3.5 bg-rose-50 border border-rose-200 rounded-2xl flex items-start gap-2.5 text-rose-800 shadow-sm animate-pulse">
+        <div className="mx-4 mt-3 p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 rounded-2xl flex items-start gap-2.5 text-rose-800 dark:text-rose-200 shadow-sm animate-pulse">
           <span className="text-xl">⛔</span>
           <div className="text-xs">
-            <h4 className="font-bold text-rose-900 text-sm">Resto Saat Ini Sedang Tutup</h4>
-            <p className="text-[11px] text-rose-700 mt-0.5 leading-snug">
+            <h4 className="font-bold text-rose-900 dark:text-rose-100 text-sm">Resto Saat Ini Sedang Tutup</h4>
+            <p className="text-[11px] text-rose-700 dark:text-rose-300 mt-0.5 leading-snug">
               {storeConfig?.closedMessage || 'Jam operasional kami buka pukul 10:00 - 22:00 WIB. Anda tetap dapat melihat-lihat daftar menu hidangan kami.'}
             </p>
           </div>
@@ -524,25 +598,25 @@ function OrderingAppContent() {
 
       {/* Mode Banner Info Alert */}
       {orderType === 'delivery' && (
-        <div className="mx-4 mt-3 bg-gradient-to-r from-purple-500/10 via-purple-600/5 to-indigo-500/10 border border-purple-200 rounded-xl p-3 flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center flex-shrink-0">
+        <div className="mx-4 mt-3 bg-gradient-to-r from-purple-500/10 via-purple-600/5 to-indigo-500/10 dark:from-purple-950/40 dark:to-indigo-950/30 border border-purple-200 dark:border-purple-800/60 rounded-xl p-3 flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 flex items-center justify-center flex-shrink-0">
             <Bike className="w-4 h-4" />
           </div>
           <div className="flex-1 text-xs">
-            <span className="font-bold text-purple-900 block">Layanan Pesan Antar Online Aktif!</span>
-            <span className="text-[11px] text-purple-700">Makanan hangat diantar kurir langsung ke alamat Anda.</span>
+            <span className="font-bold text-purple-900 dark:text-purple-200 block">Layanan Pesan Antar Online Aktif!</span>
+            <span className="text-[11px] text-purple-700 dark:text-purple-300">Deteksi jarak otomatis & diantar hangat ke alamat Anda.</span>
           </div>
         </div>
       )}
 
       {orderType === 'takeaway' && (
-        <div className="mx-4 mt-3 bg-gradient-to-r from-emerald-500/10 via-emerald-600/5 to-teal-500/10 border border-emerald-200 rounded-xl p-3 flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center flex-shrink-0">
+        <div className="mx-4 mt-3 bg-gradient-to-r from-emerald-500/10 via-emerald-600/5 to-teal-500/10 dark:from-emerald-950/40 dark:to-teal-950/30 border border-emerald-200 dark:border-emerald-800/60 rounded-xl p-3 flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 flex items-center justify-center flex-shrink-0">
             <Package className="w-4 h-4" />
           </div>
           <div className="flex-1 text-xs">
-            <span className="font-bold text-emerald-900 block">Mode Bawa Pulang / Takeaway</span>
-            <span className="text-[11px] text-emerald-700">Pesan sekarang tanpa antre, ambil langsung saat matang.</span>
+            <span className="font-bold text-emerald-900 dark:text-emerald-200 block">Mode Bawa Pulang / Takeaway</span>
+            <span className="text-[11px] text-emerald-700 dark:text-emerald-300">Pesan sekarang tanpa antre, ambil langsung saat matang.</span>
           </div>
         </div>
       )}
@@ -584,7 +658,7 @@ function OrderingAppContent() {
         </div>
 
         {/* 3 Sambal Khas Showcase */}
-        <div className="bg-emerald-950 text-white rounded-2xl p-3 shadow-md border border-emerald-800/60">
+        <div className="bg-emerald-950 dark:bg-emerald-950/80 text-white rounded-2xl p-3 shadow-md border border-emerald-800/60">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-1.5">
               <span className="text-base">🌶️</span>
@@ -631,8 +705,8 @@ function OrderingAppContent() {
               onClick={() => setSelectedCategory(category)}
               className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
                 selectedCategory === category
-                  ? 'bg-red-600 text-white shadow-sm shadow-red-200'
-                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                  ? 'bg-red-600 text-white shadow-sm shadow-red-200 dark:shadow-none'
+                  : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800'
               }`}
             >
               {category}
@@ -644,13 +718,13 @@ function OrderingAppContent() {
       {/* Menu Grid List */}
       <div className="px-4 space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
             {selectedCategory === 'Semua' ? 'Daftar Menu Lezat' : selectedCategory} ({filteredItems.length})
           </h3>
           {selectedCategory !== 'Semua' && (
             <button 
               onClick={() => setSelectedCategory('Semua')}
-              className="text-[11px] text-red-600 font-semibold hover:underline"
+              className="text-[11px] text-red-600 dark:text-red-400 font-semibold hover:underline"
             >
               Lihat Semua
             </button>
@@ -658,9 +732,9 @@ function OrderingAppContent() {
         </div>
 
         {filteredItems.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-2xl border border-slate-200 p-6 space-y-2">
+          <div className="text-center py-12 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-2">
             <span className="text-3xl">🍲</span>
-            <p className="text-xs font-bold text-slate-700">Menu tidak ditemukan</p>
+            <p className="text-xs font-bold text-slate-700 dark:text-slate-200">Menu tidak ditemukan</p>
             <p className="text-[11px] text-slate-400">Coba ganti kata kunci pencarian atau kategori lain.</p>
           </div>
         ) : (
@@ -671,13 +745,13 @@ function OrderingAppContent() {
                 <div
                   key={item.id}
                   onClick={() => isAvailable && handleOpenProduct(item)}
-                  className={`bg-white rounded-2xl border overflow-hidden shadow-sm flex flex-col justify-between transition-all ${
+                  className={`bg-white dark:bg-slate-900 rounded-2xl border overflow-hidden shadow-sm flex flex-col justify-between transition-all ${
                     isAvailable
-                      ? 'border-slate-150 hover:shadow-md cursor-pointer active:scale-[0.98]'
-                      : 'border-slate-200 opacity-60 cursor-not-allowed bg-slate-50'
+                      ? 'border-slate-200/90 dark:border-slate-800 hover:shadow-md cursor-pointer active:scale-[0.98]'
+                      : 'border-slate-200 dark:border-slate-800 opacity-60 cursor-not-allowed bg-slate-50 dark:bg-slate-900/50'
                   }`}
                 >
-                  <div className="relative aspect-video w-full bg-slate-100 overflow-hidden">
+                  <div className="relative aspect-video w-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
                     <img
                       src={item.image}
                       alt={item.name}
@@ -692,7 +766,7 @@ function OrderingAppContent() {
                       </span>
                     )}
                     {!isAvailable && (
-                      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-[1px] flex items-center justify-center">
+                      <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-[1px] flex items-center justify-center">
                         <span className="bg-red-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider shadow">
                           Stok Habis
                         </span>
@@ -702,12 +776,12 @@ function OrderingAppContent() {
 
                   <div className="p-2.5 flex-1 flex flex-col justify-between">
                     <div>
-                      <h4 className="text-xs font-bold text-slate-900 line-clamp-1 leading-snug">{item.name}</h4>
-                      <p className="text-[10px] text-slate-500 line-clamp-2 mt-0.5">{item.description}</p>
+                      <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 line-clamp-1 leading-snug">{item.name}</h4>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 line-clamp-2 mt-0.5">{item.description}</p>
                     </div>
 
                     <div className="mt-2.5 flex items-center justify-between">
-                      <span className="text-xs font-black text-rose-600">
+                      <span className="text-xs font-black text-rose-600 dark:text-rose-400">
                         Rp {item.price.toLocaleString('id-ID')}
                       </span>
                       {isAvailable && (
@@ -729,11 +803,11 @@ function OrderingAppContent() {
 
       {/* Sticky Bottom Cart Bar */}
       {cart.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto z-40 p-3 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-2xl">
+        <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto z-40 p-3 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 shadow-2xl">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
               <div className="relative">
-                <div className="w-10 h-10 rounded-xl bg-red-600 text-white flex items-center justify-center shadow-md shadow-red-200">
+                <div className="w-10 h-10 rounded-xl bg-red-600 text-white flex items-center justify-center shadow-md shadow-red-200 dark:shadow-none">
                   <ShoppingBag className="w-5 h-5" />
                 </div>
                 <span className="absolute -top-1 -right-1 bg-amber-400 text-slate-950 text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center">
@@ -741,10 +815,10 @@ function OrderingAppContent() {
                 </span>
               </div>
               <div>
-                <p className="text-[10px] text-slate-500 font-semibold leading-tight">
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold leading-tight">
                   {orderType === 'dine_in' ? `Meja ${tableNumber}` : orderType === 'delivery' ? 'Pesan Antar' : 'Bawa Pulang'} &bull; {totalItemCount} Menu
                 </p>
-                <p className="text-xs font-black text-slate-900">
+                <p className="text-xs font-black text-slate-900 dark:text-slate-100">
                   Rp {cartTotal.toLocaleString('id-ID')}
                 </p>
               </div>
@@ -752,7 +826,7 @@ function OrderingAppContent() {
 
             <button
               onClick={() => setIsCartOpen(true)}
-              className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-black flex items-center gap-1.5 shadow-md shadow-red-200 active:scale-95 transition"
+              className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-black flex items-center gap-1.5 shadow-md shadow-red-200 dark:shadow-none active:scale-95 transition"
             >
               <span>Lanjut Pesan</span>
               <ArrowRight className="w-3.5 h-3.5" />
@@ -764,9 +838,9 @@ function OrderingAppContent() {
       {/* Modal Detail Item & Opsi Sambal/Level */}
       {selectedProduct && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl max-h-[90vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-200">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-t-3xl sm:rounded-3xl max-h-[90vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-200 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-2xl">
             {/* Header Produk Modal */}
-            <div className="relative aspect-video w-full bg-slate-100">
+            <div className="relative aspect-video w-full bg-slate-100 dark:bg-slate-800">
               <img
                 src={selectedProduct.image}
                 alt={selectedProduct.name}
@@ -783,20 +857,20 @@ function OrderingAppContent() {
             <div className="p-4 overflow-y-auto flex-1 space-y-4">
               <div>
                 <div className="flex items-start justify-between gap-2">
-                  <h3 className="text-sm font-black text-slate-900">{selectedProduct.name}</h3>
-                  <span className="text-sm font-black text-rose-600 whitespace-nowrap">
+                  <h3 className="text-sm font-black text-slate-900 dark:text-slate-100">{selectedProduct.name}</h3>
+                  <span className="text-sm font-black text-rose-600 dark:text-rose-400 whitespace-nowrap">
                     Rp {selectedProduct.price.toLocaleString('id-ID')}
                   </span>
                 </div>
-                <p className="text-xs text-slate-500 mt-1">{selectedProduct.description}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{selectedProduct.description}</p>
               </div>
 
               {/* Pilihan Opsi / Sambal */}
               {selectedProduct.options && selectedProduct.options.length > 0 && (
-                <div className="space-y-3 pt-2 border-t border-slate-100">
+                <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800">
                   {selectedProduct.options.map((opt) => (
                     <div key={opt.name} className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-800 flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center justify-between">
                         <span>{opt.name}</span>
                         <span className="text-[10px] text-slate-400 font-normal">Wajib pilih 1</span>
                       </label>
@@ -818,13 +892,13 @@ function OrderingAppContent() {
                               }}
                               className={`p-2.5 rounded-xl border text-left text-xs flex items-center justify-between transition ${
                                 isSelected
-                                  ? 'border-red-600 bg-red-50/70 text-red-950 font-bold'
-                                  : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                                  ? 'border-red-600 bg-red-50/70 dark:bg-red-950/40 text-red-950 dark:text-red-200 font-bold'
+                                  : 'border-slate-200 dark:border-slate-750 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
                               }`}
                             >
                               <span>{choice.label}</span>
                               {choice.extraPrice ? (
-                                <span className="text-[11px] text-rose-600 font-semibold">
+                                <span className="text-[11px] text-rose-600 dark:text-rose-400 font-semibold">
                                   +Rp {choice.extraPrice.toLocaleString('id-ID')}
                                 </span>
                               ) : (
@@ -840,8 +914,8 @@ function OrderingAppContent() {
               )}
 
               {/* Catatan Khusus */}
-              <div className="pt-2 border-t border-slate-100">
-                <label className="block text-xs font-bold text-slate-800 mb-1">
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
                   Catatan untuk Dapur (Opsional)
                 </label>
                 <input
@@ -849,24 +923,24 @@ function OrderingAppContent() {
                   value={itemNotes}
                   onChange={(e) => setItemNotes(e.target.value)}
                   placeholder="Contoh: Sambal dipisah, jangan terlalu garing..."
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-red-500"
                 />
               </div>
 
               {/* Quantity Counter */}
-              <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                <span className="text-xs font-bold text-slate-800">Jumlah Pesanan</span>
+              <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Jumlah Pesanan</span>
                 <div className="flex items-center gap-3">
                   <button
                     onClick={() => setProductQuantity((q) => Math.max(1, q - 1))}
-                    className="w-8 h-8 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 flex items-center justify-center font-bold"
+                    className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center font-bold"
                   >
                     <Minus className="w-4 h-4" />
                   </button>
                   <span className="text-sm font-black w-6 text-center">{productQuantity}</span>
                   <button
                     onClick={() => setProductQuantity((q) => q + 1)}
-                    className="w-8 h-8 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 flex items-center justify-center font-bold"
+                    className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center font-bold"
                   >
                     <Plus className="w-4 h-4" />
                   </button>
@@ -875,16 +949,16 @@ function OrderingAppContent() {
             </div>
 
             {/* Footer Tambah ke Keranjang */}
-            <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-3">
+            <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 flex items-center justify-between gap-3">
               <div>
-                <p className="text-[10px] text-slate-400">Total Produk</p>
-                <p className="text-sm font-black text-rose-600">
+                <p className="text-[10px] text-slate-400 dark:text-slate-500">Total Produk</p>
+                <p className="text-sm font-black text-rose-600 dark:text-rose-400">
                   Rp {(currentModalUnitPrice * productQuantity).toLocaleString('id-ID')}
                 </p>
               </div>
               <button
                 onClick={handleAddToCart}
-                className="px-6 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-black shadow-md shadow-red-200 active:scale-95 transition"
+                className="px-6 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-black shadow-md shadow-red-200 dark:shadow-none active:scale-95 transition"
               >
                 + Tambah ke Pesanan
               </button>
@@ -896,20 +970,20 @@ function OrderingAppContent() {
       {/* Modal Keranjang & Checkout */}
       {isCartOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl max-h-[92vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-200">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-t-3xl sm:rounded-3xl max-h-[92vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-200 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-2xl">
             {/* Header Cart */}
-            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-850">
               <div className="flex items-center gap-2">
-                <ShoppingBag className="w-5 h-5 text-rose-600" />
-                <h3 className="text-sm font-bold text-slate-900">
+                <ShoppingBag className="w-5 h-5 text-rose-600 dark:text-rose-400" />
+                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
                   {orderType === 'dine_in' && `Rincian Pesanan Meja ${tableNumber}`}
-                  {orderType === 'delivery' && 'Pesanan Antar (Delivery)'}
+                  {orderType === 'delivery' && 'Pesanan Antar (Delivery Otomatis)'}
                   {orderType === 'takeaway' && 'Pesanan Bawa Pulang (Takeaway)'}
                 </h3>
               </div>
               <button
                 onClick={() => setIsCartOpen(false)}
-                className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-300"
+                className="w-7 h-7 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 transition"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -918,44 +992,44 @@ function OrderingAppContent() {
             {/* Cart Items List */}
             <div className="p-4 overflow-y-auto flex-1 space-y-3">
               {cart.map((item, idx) => (
-                <div key={idx} className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
+                <div key={idx} className="p-3 bg-slate-50 dark:bg-slate-800/70 rounded-xl border border-slate-100 dark:border-slate-750 space-y-2">
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <h4 className="text-xs font-bold text-slate-900">{item.name}</h4>
+                      <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">{item.name}</h4>
                       {item.selectedOptions.length > 0 && (
-                        <p className="text-[11px] text-slate-500 mt-0.5">
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
                           {item.selectedOptions.map((o) => `${o.choiceLabel}`).join(' • ')}
                         </p>
                       )}
                       {item.notes && (
-                        <p className="text-[11px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded mt-1 inline-block">
+                        <p className="text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 px-2 py-0.5 rounded mt-1 inline-block border border-amber-200/50 dark:border-amber-800/50">
                           Catatan: &ldquo;{item.notes}&rdquo;
                         </p>
                       )}
                     </div>
-                    <span className="text-xs font-bold text-rose-600 whitespace-nowrap">
+                    <span className="text-xs font-bold text-rose-600 dark:text-rose-400 whitespace-nowrap">
                       Rp {(item.unitPrice * item.quantity).toLocaleString('id-ID')}
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-between pt-1 border-t border-slate-200/60">
+                  <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
                     <button
                       onClick={() => handleRemoveCartItem(idx)}
-                      className="text-[11px] text-rose-500 hover:text-rose-700 font-medium"
+                      className="text-[11px] text-rose-500 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 font-medium"
                     >
                       Hapus
                     </button>
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => handleUpdateCartQty(idx, -1)}
-                        className="w-6 h-6 rounded bg-white border border-slate-200 flex items-center justify-center text-slate-700 hover:bg-slate-100"
+                        className="w-6 h-6 rounded bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-600"
                       >
                         <Minus className="w-3 h-3" />
                       </button>
                       <span className="text-xs font-bold w-4 text-center">{item.quantity}</span>
                       <button
                         onClick={() => handleUpdateCartQty(idx, 1)}
-                        className="w-6 h-6 rounded bg-white border border-slate-200 flex items-center justify-center text-slate-700 hover:bg-slate-100"
+                        className="w-6 h-6 rounded bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-600"
                       >
                         <Plus className="w-3 h-3" />
                       </button>
@@ -965,9 +1039,9 @@ function OrderingAppContent() {
               ))}
 
               {/* Form Data Pelanggan */}
-              <div className="border-t border-slate-100 pt-3 space-y-3">
+              <div className="border-t border-slate-100 dark:border-slate-800 pt-3 space-y-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                  <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
                     Nama Pemesan <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -975,16 +1049,16 @@ function OrderingAppContent() {
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
                     placeholder="Misal: Kak Dimas"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-rose-500"
+                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-rose-500"
                   />
                 </div>
 
                 {/* Nomor WhatsApp (Khusus Delivery & Takeaway) */}
                 {(orderType === 'delivery' || orderType === 'takeaway') && (
                   <div>
-                    <label className="block text-xs font-bold text-slate-800 mb-1 flex items-center justify-between">
+                    <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1 flex items-center justify-between">
                       <span className="flex items-center gap-1">
-                        <Phone className="w-3.5 h-3.5 text-emerald-600" />
+                        <Phone className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                         Nomor WhatsApp Pemesan <span className="text-rose-500">*</span>
                       </span>
                       <span className="text-[10px] text-slate-400 font-normal">Untuk koordinasi kurir</span>
@@ -994,63 +1068,116 @@ function OrderingAppContent() {
                       value={customerPhone}
                       onChange={(e) => setCustomerPhone(e.target.value)}
                       placeholder="Contoh: 081234567890"
-                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-rose-500"
+                      className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-rose-500"
                     />
                   </div>
                 )}
 
-                {/* Form Spesifik Delivery */}
+                {/* Form Spesifik Delivery (Deteksi KM Otomatis) */}
                 {orderType === 'delivery' && (
-                  <div className="space-y-3 bg-purple-50/50 p-3 rounded-2xl border border-purple-100">
-                    {/* Pilihan Zona Ongkir */}
+                  <div className="space-y-3 bg-purple-50/70 dark:bg-purple-950/40 p-3 rounded-2xl border border-purple-100 dark:border-purple-800/60">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-purple-950 dark:text-purple-200 flex items-center gap-1">
+                        <Bike className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                        Lokasi & Jarak Pengantaran
+                      </span>
+                      {deliverySettings?.freeDeliveryThreshold && (
+                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
+                          Gratis ongkir &gt; Rp {deliverySettings.freeDeliveryThreshold.toLocaleString('id-ID')}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Tombol GPS Otomatis */}
+                    <button
+                      type="button"
+                      onClick={handleDetectGps}
+                      disabled={isDetectingGps}
+                      className="w-full py-2.5 px-3 bg-purple-600 hover:bg-purple-700 active:scale-[0.98] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition disabled:opacity-60"
+                    >
+                      <Navigation className={`w-4 h-4 ${isDetectingGps ? 'animate-spin' : ''}`} />
+                      <span>{isDetectingGps ? 'Mendeteksi Posisi Anda...' : '📍 Deteksi Lokasi GPS Saya (Otomatis)'}</span>
+                    </button>
+
+                    {/* Dropdown Preset Wilayah / Desa Sekitar */}
                     <div>
-                      <label className="block text-xs font-bold text-purple-900 mb-1 flex items-center justify-between">
-                        <span>Pilih Area / Zona Ongkir <span className="text-rose-500">*</span></span>
-                        {deliverySettings?.freeDeliveryThreshold && (
-                          <span className="text-[10px] text-emerald-600 font-semibold">
-                            Gratis ongkir &gt; Rp {deliverySettings.freeDeliveryThreshold.toLocaleString('id-ID')}
-                          </span>
-                        )}
+                      <label className="block text-[11px] font-semibold text-purple-900 dark:text-purple-300 mb-1">
+                        Atau Pilih Wilayah / Desa Pengantaran:
                       </label>
                       <select
-                        value={selectedZone?.id || ''}
-                        onChange={(e) => {
-                          const found = activeZones.find((z) => z.id === e.target.value);
-                          if (found) setSelectedZone(found);
-                        }}
-                        className="w-full px-3 py-2 bg-white border border-purple-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500 font-medium"
+                        value={selectedVillagePresetId}
+                        onChange={(e) => handleSelectVillagePreset(e.target.value)}
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-purple-200 dark:border-purple-800/80 rounded-xl text-xs text-slate-800 dark:text-slate-100 font-medium focus:outline-none focus:ring-2 focus:ring-purple-500"
                       >
-                        {activeZones.map((zone) => (
-                          <option key={zone.id} value={zone.id}>
-                            {zone.name} &bull; Rp {zone.fee.toLocaleString('id-ID')} ({zone.estimatedTime})
+                        {LOCAL_VILLAGE_PRESETS.map((preset) => (
+                          <option key={preset.id} value={preset.id}>
+                            {preset.name}
                           </option>
                         ))}
+                        {selectedVillagePresetId === 'custom-gps' && (
+                          <option value="custom-gps">📍 Koordinat GPS Pengguna Terdeteksi</option>
+                        )}
                       </select>
-                      {selectedZone && (
-                        <p className="text-[10px] text-purple-700 mt-1">
-                          📍 {selectedZone.description}
-                        </p>
-                      )}
+                    </div>
+
+                    {/* Status Alert Notifikasi Lokasi */}
+                    {locationStatusMsg && (
+                      <div className={`p-2 rounded-xl text-[11px] font-medium flex items-center gap-1.5 ${
+                        locationStatusMsg.isError
+                          ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-900'
+                          : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                      }`}>
+                        <span>{locationStatusMsg.text}</span>
+                      </div>
+                    )}
+
+                    {/* Card Ringkasan Jarak KM & Ongkir Otomatis */}
+                    <div className="bg-purple-100/80 dark:bg-purple-900/40 border border-purple-200 dark:border-purple-700/60 rounded-xl p-2.5 flex items-center justify-between text-xs">
+                      <div>
+                        <span className="text-[10px] uppercase font-black tracking-wider text-purple-700 dark:text-purple-300 block">
+                          Jarak Terdeteksi Otomatis:
+                        </span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="font-extrabold text-sm text-purple-950 dark:text-purple-100">
+                            🛵 {deliveryDistanceKm} KM
+                          </span>
+                          <span className="text-[10px] text-purple-700 dark:text-purple-300">
+                            ({deliveryCalculation.estimatedMinutesText})
+                          </span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[10px] uppercase font-black tracking-wider text-purple-700 dark:text-purple-300 block">
+                          Tarif Ongkir:
+                        </span>
+                        <span className="font-black text-sm text-purple-900 dark:text-purple-200 mt-0.5 block">
+                          {currentDeliveryFee === 0 ? (
+                            <span className="text-emerald-600 dark:text-emerald-400 font-extrabold">GRATIS</span>
+                          ) : (
+                            `Rp ${currentDeliveryFee.toLocaleString('id-ID')}`
+                          )}
+                        </span>
+                      </div>
                     </div>
 
                     {/* Alamat Pengantaran */}
                     <div>
-                      <label className="block text-xs font-bold text-purple-900 mb-1 flex items-center gap-1">
-                        <MapPin className="w-3.5 h-3.5 text-purple-600" />
+                      <label className="block text-xs font-bold text-purple-900 dark:text-purple-200 mb-1 flex items-center gap-1">
+                        <MapPin className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
                         Alamat Lengkap Pengantaran <span className="text-rose-500">*</span>
                       </label>
                       <textarea
                         rows={2}
                         value={deliveryAddress}
                         onChange={(e) => setDeliveryAddress(e.target.value)}
-                        placeholder="Contoh: Jl. Merpati No. 12 RT 03/RW 04, Komplek Griya Asri"
-                        className="w-full px-3 py-2 bg-white border border-purple-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        placeholder="Contoh: Jl. Merpati No. 12 RT 03/RW 04, samping toko fotokopi"
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-purple-200 dark:border-purple-800/80 rounded-xl text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-purple-500"
                       />
                     </div>
 
                     {/* Patokan Rumah / Catatan Kurir */}
                     <div>
-                      <label className="block text-[11px] font-semibold text-purple-800 mb-1">
+                      <label className="block text-[11px] font-semibold text-purple-800 dark:text-purple-300 mb-1">
                         Patokan Rumah / Catatan Kurir (Opsional)
                       </label>
                       <input
@@ -1058,7 +1185,7 @@ function OrderingAppContent() {
                         value={deliveryNotes}
                         onChange={(e) => setDeliveryNotes(e.target.value)}
                         placeholder="Contoh: Pagar hitam depan musholla, titip di sekuriti"
-                        className="w-full px-3 py-1.5 bg-white border border-purple-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        className="w-full px-3 py-1.5 bg-white dark:bg-slate-800 border border-purple-200 dark:border-purple-800/80 rounded-xl text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-purple-500"
                       />
                     </div>
                   </div>
@@ -1066,15 +1193,15 @@ function OrderingAppContent() {
 
                 {/* Form Spesifik Takeaway */}
                 {orderType === 'takeaway' && (
-                  <div className="bg-emerald-50/60 p-3 rounded-2xl border border-emerald-100 space-y-2">
-                    <label className="block text-xs font-bold text-emerald-950 mb-1 flex items-center gap-1">
-                      <Clock className="w-3.5 h-3.5 text-emerald-700" />
+                  <div className="bg-emerald-50/60 dark:bg-emerald-950/40 p-3 rounded-2xl border border-emerald-100 dark:border-emerald-800/60 space-y-2">
+                    <label className="block text-xs font-bold text-emerald-950 dark:text-emerald-200 mb-1 flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400" />
                       Estimasi Waktu Pengambilan
                     </label>
                     <select
                       value={pickupTime}
                       onChange={(e) => setPickupTime(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-emerald-200 rounded-xl text-xs text-slate-800 font-medium"
+                      className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-emerald-200 dark:border-emerald-800/80 rounded-xl text-xs text-slate-800 dark:text-slate-100 font-medium"
                     >
                       <option value="15-20 Menit Lagi">15 - 20 Menit Lagi (Segera)</option>
                       <option value="30 Menit Lagi">30 Menit Lagi</option>
@@ -1087,17 +1214,17 @@ function OrderingAppContent() {
               </div>
 
               {/* Voucher & Promo Diskon */}
-              <div className="border-t border-slate-100 pt-3">
+              <div className="border-t border-slate-100 dark:border-slate-800 pt-3">
                 <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
-                    <Tag className="w-4 h-4 text-rose-600" />
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200">
+                    <Tag className="w-4 h-4 text-rose-600 dark:text-rose-400" />
                     <span>Voucher Diskon & Promo</span>
                   </div>
                   {promos.length > 0 && (
                     <button
                       type="button"
                       onClick={() => setShowPromoList(!showPromoList)}
-                      className="text-[11px] text-rose-600 font-semibold hover:underline"
+                      className="text-[11px] text-rose-600 dark:text-rose-400 font-semibold hover:underline"
                     >
                       {showPromoList ? 'Tutup Pilihan' : 'Pilih Kupon'}
                     </button>
@@ -1112,7 +1239,7 @@ function OrderingAppContent() {
                       value={promoInput}
                       onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
                       placeholder="Masukkan kode kupon"
-                      className="w-full px-3 py-2 uppercase border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-rose-500 font-mono tracking-wider"
+                      className="w-full px-3 py-2 uppercase bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-rose-500 font-mono tracking-wider"
                     />
                     {appliedPromo && (
                       <span className="absolute right-2.5 top-2.5 w-2 h-2 rounded-full bg-emerald-500"></span>
@@ -1122,7 +1249,7 @@ function OrderingAppContent() {
                     <button
                       type="button"
                       onClick={handleRemovePromoCode}
-                      className="px-3 py-2 bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold hover:bg-slate-300 transition"
+                      className="px-3 py-2 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-semibold hover:bg-slate-300 dark:hover:bg-slate-700 transition"
                     >
                       Hapus
                     </button>
@@ -1139,25 +1266,25 @@ function OrderingAppContent() {
 
                 {/* Promo Message */}
                 {promoMessage && (
-                  <p className={`text-[11px] mt-1.5 font-medium ${promoMessage.isError ? 'text-rose-600' : 'text-emerald-600'}`}>
+                  <p className={`text-[11px] mt-1.5 font-medium ${promoMessage.isError ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
                     {promoMessage.text}
                   </p>
                 )}
 
                 {/* Active Applied Promo Banner */}
                 {appliedPromo && (
-                  <div className="mt-2.5 p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
+                  <div className="mt-2.5 p-2.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/80 rounded-xl flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <Gift className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <Gift className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                       <div>
                         <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-bold text-emerald-800 font-mono">{appliedPromo.code}</span>
-                          <span className="text-[10px] px-1.5 py-0.5 bg-emerald-200 text-emerald-900 rounded font-semibold">Aktif</span>
+                          <span className="text-xs font-bold text-emerald-800 dark:text-emerald-200 font-mono">{appliedPromo.code}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100 rounded font-semibold">Aktif</span>
                         </div>
-                        <p className="text-[10px] text-emerald-700">{appliedPromo.title}</p>
+                        <p className="text-[10px] text-emerald-700 dark:text-emerald-300">{appliedPromo.title}</p>
                       </div>
                     </div>
-                    <span className="text-xs font-extrabold text-emerald-700 whitespace-nowrap">
+                    <span className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300 whitespace-nowrap">
                       -Rp {discountAmount.toLocaleString('id-ID')}
                     </span>
                   </div>
@@ -1165,8 +1292,8 @@ function OrderingAppContent() {
 
                 {/* Quick Claimable Promo List */}
                 {showPromoList && promos.length > 0 && (
-                  <div className="mt-2.5 space-y-2 border border-slate-200 rounded-2xl p-2.5 bg-slate-50/80 max-h-48 overflow-y-auto">
-                    <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">Kupon Tersedia:</p>
+                  <div className="mt-2.5 space-y-2 border border-slate-200 dark:border-slate-800 rounded-2xl p-2.5 bg-slate-50/80 dark:bg-slate-800/80 max-h-48 overflow-y-auto">
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider">Kupon Tersedia:</p>
                     {promos.filter(p => p.isActive).map((p) => {
                       const isEligible = cartSubtotal >= (p.minOrder || 0);
                       const isSelected = appliedPromo?.code === p.code;
@@ -1175,22 +1302,22 @@ function OrderingAppContent() {
                           key={p.id}
                           className={`p-2 rounded-xl border transition flex items-center justify-between gap-2 ${
                             isSelected
-                              ? 'bg-emerald-50 border-emerald-300'
+                              ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-300 dark:border-emerald-700'
                               : isEligible
-                              ? 'bg-white border-slate-200 hover:border-rose-300'
-                              : 'bg-slate-100 border-slate-200 opacity-60'
+                              ? 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-rose-300'
+                              : 'bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 opacity-60'
                           }`}
                         >
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5">
-                              <span className="text-xs font-bold text-slate-900 font-mono bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                              <span className="text-xs font-bold text-slate-900 dark:text-slate-100 font-mono bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-600">
                                 {p.code}
                               </span>
-                              <span className="text-[11px] font-semibold text-rose-600 truncate">
+                              <span className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 truncate">
                                 {p.type === 'percent' ? `Diskon ${p.value}%` : `Hemat Rp ${p.value.toLocaleString('id-ID')}`}
                               </span>
                             </div>
-                            <p className="text-[10px] text-slate-500 mt-0.5 line-clamp-1">
+                            <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-1">
                               {p.description}
                             </p>
                           </div>
@@ -1199,7 +1326,7 @@ function OrderingAppContent() {
                               <button
                                 type="button"
                                 onClick={handleRemovePromoCode}
-                                className="px-2.5 py-1 text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded-lg"
+                                className="px-2.5 py-1 text-[11px] font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 rounded-lg"
                               >
                                 Batal
                               </button>
@@ -1211,7 +1338,7 @@ function OrderingAppContent() {
                                 className={`px-2.5 py-1 text-[11px] font-bold rounded-lg ${
                                   isEligible
                                     ? 'bg-rose-600 text-white hover:bg-rose-700'
-                                    : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                    : 'bg-slate-200 dark:bg-slate-700 text-slate-400 cursor-not-allowed'
                                 }`}
                               >
                                 {isEligible ? 'Pakai' : 'Min. Order'}
@@ -1226,8 +1353,8 @@ function OrderingAppContent() {
               </div>
 
               {/* Pilihan Metode Bayar */}
-              <div className="border-t border-slate-100 pt-3">
-                <label className="block text-xs font-bold text-slate-800 mb-2">
+              <div className="border-t border-slate-100 dark:border-slate-800 pt-3">
+                <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-2">
                   Metode Pembayaran
                 </label>
                 <div className="grid grid-cols-2 gap-2">
@@ -1236,17 +1363,17 @@ function OrderingAppContent() {
                     onClick={() => setPaymentMethod('cashier')}
                     className={`p-2.5 rounded-xl border text-left transition flex flex-col justify-between ${
                       paymentMethod === 'cashier'
-                        ? 'border-rose-600 bg-rose-50/70 text-rose-950 font-bold'
-                        : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                        ? 'border-rose-600 bg-rose-50/70 dark:bg-rose-950/50 text-rose-950 dark:text-rose-200 font-bold'
+                        : 'border-slate-200 dark:border-slate-750 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
                     }`}
                   >
                     <div className="flex items-center gap-1.5">
-                      <Banknote className="w-4 h-4 text-emerald-600" />
+                      <Banknote className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                       <span className="text-xs">
                         {orderType === 'delivery' ? 'COD (Tunai ke Kurir)' : 'Bayar di Kasir'}
                       </span>
                     </div>
-                    <span className="text-[10px] text-slate-500 font-normal mt-1">
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-normal mt-1">
                       {orderType === 'delivery' ? 'Bayar saat kurir sampai' : 'Tunai / EDC kasir'}
                     </span>
                   </button>
@@ -1256,15 +1383,15 @@ function OrderingAppContent() {
                     onClick={() => setPaymentMethod('qris')}
                     className={`p-2.5 rounded-xl border text-left transition flex flex-col justify-between ${
                       paymentMethod === 'qris'
-                        ? 'border-rose-600 bg-rose-50/70 text-rose-950 font-bold'
-                        : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                        ? 'border-rose-600 bg-rose-50/70 dark:bg-rose-950/50 text-rose-950 dark:text-rose-200 font-bold'
+                        : 'border-slate-200 dark:border-slate-750 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
                     }`}
                   >
                     <div className="flex items-center gap-1.5">
-                      <CreditCard className="w-4 h-4 text-rose-600" />
+                      <CreditCard className="w-4 h-4 text-rose-600 dark:text-rose-400" />
                       <span className="text-xs">QRIS Instan</span>
                     </div>
-                    <span className="text-[10px] text-slate-500 font-normal mt-1">
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-normal mt-1">
                       Scan via Gopay/OVO/BCA
                     </span>
                   </button>
@@ -1272,13 +1399,13 @@ function OrderingAppContent() {
               </div>
 
               {/* Rincian Biaya */}
-              <div className="bg-slate-50 p-3 rounded-xl space-y-1.5 text-xs text-slate-600 border border-slate-100">
+              <div className="bg-slate-50 dark:bg-slate-800/70 p-3 rounded-xl space-y-1.5 text-xs text-slate-600 dark:text-slate-300 border border-slate-100 dark:border-slate-750">
                 <div className="flex justify-between">
                   <span>Subtotal Pesanan</span>
                   <span>Rp {cartSubtotal.toLocaleString('id-ID')}</span>
                 </div>
                 {appliedPromo && discountAmount > 0 && (
-                  <div className="flex justify-between text-emerald-600 font-bold">
+                  <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-bold">
                     <span className="flex items-center gap-1">
                       <Tag className="w-3.5 h-3.5" /> Diskon Kupon ({appliedPromo.code})
                     </span>
@@ -1286,34 +1413,34 @@ function OrderingAppContent() {
                   </div>
                 )}
                 {orderType === 'delivery' && (
-                  <div className="flex justify-between text-purple-700 font-medium">
-                    <span>Ongkos Kirim ({selectedZone?.name || 'Area'})</span>
+                  <div className="flex justify-between text-purple-700 dark:text-purple-300 font-medium">
+                    <span>Ongkos Kirim ({deliveryDistanceKm} km &bull; {deliveryCalculation.zoneName})</span>
                     <span>
                       {currentDeliveryFee === 0 ? (
-                        <span className="text-emerald-600 font-bold">GRATIS</span>
+                        <span className="text-emerald-600 dark:text-emerald-400 font-bold">GRATIS</span>
                       ) : (
                         `Rp ${currentDeliveryFee.toLocaleString('id-ID')}`
                       )}
                     </span>
                   </div>
                 )}
-                <div className="flex justify-between font-extrabold text-sm text-slate-900 pt-1 border-t border-slate-200">
+                <div className="flex justify-between font-extrabold text-sm text-slate-900 dark:text-slate-100 pt-1 border-t border-slate-200 dark:border-slate-700">
                   <span>Total Tagihan</span>
-                  <span className="text-rose-600">Rp {cartTotal.toLocaleString('id-ID')}</span>
+                  <span className="text-rose-600 dark:text-rose-400">Rp {cartTotal.toLocaleString('id-ID')}</span>
                 </div>
-                <div className="pt-1 flex items-center justify-between text-[10px] text-slate-400">
+                <div className="pt-1 flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500">
                   <span>Harga sudah bersih / netto</span>
-                  <span className="font-semibold text-emerald-600">Bebas Pajak Resto (0% PB1)</span>
+                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">Bebas Pajak Resto (0% PB1)</span>
                 </div>
               </div>
             </div>
 
             {/* Footer Checkout Button */}
-            <div className="p-4 border-t border-slate-100 bg-white space-y-2">
+            <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-2">
               <button
                 disabled={isSubmitting || cart.length === 0 || !isStoreOpen}
                 onClick={handleSubmitOrder}
-                className="w-full py-3.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-xl text-sm font-bold shadow-md shadow-red-200 flex items-center justify-center gap-2 transition active:scale-[0.98]"
+                className="w-full py-3.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-xl text-sm font-bold shadow-md shadow-red-200 dark:shadow-none flex items-center justify-center gap-2 transition active:scale-[0.98]"
               >
                 {!isStoreOpen ? (
                   <span>⛔ Resto Sedang Tutup</span>
@@ -1340,7 +1467,7 @@ function OrderingAppContent() {
                   `Mode: ${orderType === 'delivery' ? '🛵 PESAN ANTAR (DELIVERY)' : orderType === 'takeaway' ? '🛍️ BAWA PULANG' : `🍽️ MEJA ${tableNumber}`}\n` +
                   `Pemesan: ${customerName || 'Pelanggan'}\n` +
                   (customerPhone ? `No WA: ${customerPhone}\n` : '') +
-                  (orderType === 'delivery' ? `Alamat: ${deliveryAddress}\nArea: ${selectedZone?.name} (Ongkir: Rp ${currentDeliveryFee.toLocaleString('id-ID')})\n` : '') +
+                  (orderType === 'delivery' ? `Alamat: ${deliveryAddress}\nJarak: ${deliveryDistanceKm} km (${deliveryCalculation.zoneName})\nOngkir: Rp ${currentDeliveryFee.toLocaleString('id-ID')}\n` : '') +
                   `\nMenu:\n` +
                   cart.map((i) => `- ${i.quantity}x ${i.name} ${i.selectedOptions.map((o) => o.choiceLabel).join(', ')} ${i.notes ? `(${i.notes})` : ''}`).join('\n') +
                   `\n\nTotal: Rp ${cartTotal.toLocaleString('id-ID')}\nMohon diproses ya kak!`
@@ -1359,13 +1486,13 @@ function OrderingAppContent() {
       {/* Modal Ubah / Set Meja Manual (Hanya untuk Dine-in) */}
       {isTableModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-xs rounded-2xl p-5 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-xs rounded-2xl p-5 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200 text-slate-900 dark:text-slate-100">
             <div className="text-center">
-              <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 mx-auto flex items-center justify-center mb-2">
+              <div className="w-12 h-12 rounded-2xl bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 mx-auto flex items-center justify-center mb-2">
                 <Utensils className="w-6 h-6" />
               </div>
-              <h3 className="text-base font-bold text-slate-900">Makan di Tempat</h3>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Makan di Tempat</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                 Masukkan nomor meja yang tertera pada stand akrilik di meja Anda.
               </p>
             </div>
@@ -1378,7 +1505,7 @@ function OrderingAppContent() {
                 value={tempTableInput}
                 onChange={(e) => setTempTableInput(e.target.value)}
                 placeholder="Contoh: 05"
-                className="w-full text-center text-2xl font-black tracking-widest py-3 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-rose-500 text-slate-900"
+                className="w-full text-center text-2xl font-black tracking-widest py-3 border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl focus:outline-none focus:border-rose-500 text-slate-900 dark:text-slate-100"
               />
             </div>
 
@@ -1389,18 +1516,18 @@ function OrderingAppContent() {
                   setIsTableModalOpen(false);
                 }
               }}
-              className="w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition"
+              className="w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition shadow-sm"
             >
               Mulai Pesan Menu
             </button>
 
-            <div className="text-center pt-1 border-t border-slate-100">
+            <div className="text-center pt-1 border-t border-slate-100 dark:border-slate-800">
               <button
                 onClick={() => {
                   setOrderType('delivery');
                   setIsTableModalOpen(false);
                 }}
-                className="text-xs font-semibold text-purple-600 hover:underline"
+                className="text-xs font-semibold text-purple-600 dark:text-purple-400 hover:underline"
               >
                 Atau ingin pesan antar ke rumah?
               </button>
