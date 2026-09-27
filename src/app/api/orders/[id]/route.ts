@@ -1,14 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getOrderById, updateOrderStatus } from '@/lib/order-store';
+import { getOrderById, updateOrderStatus, syncOrders } from '@/lib/order-store';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const order = getOrderById(params.id);
+    let order = getOrderById(params.id);
+
+    // Self-healing: jika instance serverless baru belum memiliki order di /tmp, pulihkan dari header fallback
+    if (!order) {
+      const fallbackHeader = request.headers.get('x-fallback-order');
+      if (fallbackHeader) {
+        try {
+          const parsed = JSON.parse(decodeURIComponent(fallbackHeader));
+          if (parsed && parsed.id === params.id) {
+            syncOrders([parsed]);
+            order = parsed;
+          }
+        } catch (e) {
+          // ignore header parse error
+        }
+      }
+    }
+
     if (!order) {
       return NextResponse.json({ success: false, error: 'Pesanan tidak ditemukan' }, { status: 404 });
     }

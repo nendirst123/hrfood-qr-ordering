@@ -30,6 +30,19 @@ function ensureDataDir() {
   }
 }
 
+// Helper format tanggal dalam timezone Asia/Jakarta (WIB)
+export function getWibDateString(date: Date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(date);
+}
+
+export function getOrderWibDateString(isoString: string): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date(isoString));
+  } catch (e) {
+    return isoString.split('T')[0];
+  }
+}
+
 export function getAllOrders(filterDate?: string): Order[] {
   ensureDataDir();
   let orders: Order[] = [];
@@ -46,26 +59,44 @@ export function getAllOrders(filterDate?: string): Order[] {
         deliveryFee: o.deliveryFee || 0,
       }));
 
+      // Merge with global cached orders if any newer in memory
+      if (globalThis.__CACHED_ORDERS__ && globalThis.__CACHED_ORDERS__.length > 0) {
+        const orderMap = new Map<string, Order>();
+        orders.forEach(o => orderMap.set(o.id, o));
+        globalThis.__CACHED_ORDERS__.forEach(o => {
+          const existing = orderMap.get(o.id);
+          if (!existing || new Date(o.updatedAt).getTime() >= new Date(existing.updatedAt).getTime()) {
+            orderMap.set(o.id, o);
+          }
+        });
+        orders = Array.from(orderMap.values());
+      }
+
       globalThis.__CACHED_ORDERS__ = orders;
+    } else if (globalThis.__CACHED_ORDERS__) {
+      orders = globalThis.__CACHED_ORDERS__;
     }
   } catch (err) {
     console.error('Failed reading orders file, using in-memory cache:', err);
     orders = globalThis.__CACHED_ORDERS__ || [];
   }
 
-  // Filter Tanggal jika diberikan
+  // Filter Tanggal berdasarkan Timezone Resto (Asia/Jakarta / WIB)
   if (filterDate && filterDate !== 'all') {
+    const todayWib = getWibDateString();
     let targetDateStr = filterDate;
-    const now = new Date();
 
     if (filterDate === 'today') {
-      targetDateStr = now.toISOString().split('T')[0];
+      targetDateStr = todayWib;
     } else if (filterDate === 'yesterday') {
-      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-      targetDateStr = yesterday.toISOString().split('T')[0];
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      targetDateStr = getWibDateString(yesterday);
     }
 
-    orders = orders.filter(o => o.createdAt.startsWith(targetDateStr));
+    orders = orders.filter(o => {
+      const orderWib = getOrderWibDateString(o.createdAt);
+      return orderWib === targetDateStr;
+    });
   }
 
   return orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -208,3 +239,45 @@ export function resetAllOrders(): { success: boolean; backupOrders: Order[]; cou
     count: previousOrders.length,
   };
 }
+
+// Sinkronisasi pesanan dari klien (Self-healing Serverless Persistence)
+export function syncOrders(incomingOrders: Order[]): Order[] {
+  ensureDataDir();
+  const currentOrders = getAllOrders();
+  const orderMap = new Map<string, Order>();
+
+  currentOrders.forEach(o => orderMap.set(o.id, o));
+
+  let hasChanges = false;
+  incomingOrders.forEach(incoming => {
+    if (!incoming || !incoming.id) return;
+    const existing = orderMap.get(incoming.id);
+    if (!existing) {
+      orderMap.set(incoming.id, incoming);
+      hasChanges = true;
+    } else {
+      const incomingTime = new Date(incoming.updatedAt || incoming.createdAt).getTime();
+      const existingTime = new Date(existing.updatedAt || existing.createdAt).getTime();
+      if (incomingTime > existingTime) {
+        orderMap.set(incoming.id, incoming);
+        hasChanges = true;
+      }
+    }
+  });
+
+  const merged = Array.from(orderMap.values()).sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+
+  if (hasChanges) {
+    globalThis.__CACHED_ORDERS__ = merged;
+    try {
+      fs.writeFileSync(DATA_FILE, JSON.stringify(merged, null, 2), 'utf-8');
+    } catch (err) {
+      console.warn('Failed saving synced orders to filesystem:', err);
+    }
+  }
+
+  return merged;
+}
+

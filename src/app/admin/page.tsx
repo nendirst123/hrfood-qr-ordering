@@ -58,6 +58,8 @@ export default function AdminDashboardPage() {
   const [isBellRinging, setIsBellRinging] = useState(false);
   const prevOrderCountRef = useRef(0);
   const bellTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const seenAdminOrderIdsRef = useRef<Set<string>>(new Set());
+  const initialAdminLoadRef = useRef<boolean>(false);
 
   const handleToggleBellTest = () => {
     if (isBellRinging) {
@@ -126,6 +128,23 @@ export default function AdminDashboardPage() {
     return () => clearInterval(timer);
   }, []);
 
+  // Ambil cache laporan dari localStorage pada mount awal
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem('hrfood_admin_report_cache');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed) {
+          setReport(parsed);
+          if (Array.isArray(parsed.recentOrders)) {
+            parsed.recentOrders.forEach((o: Order) => seenAdminOrderIdsRef.current.add(o.id));
+          }
+          setLoading(false);
+        }
+      }
+    } catch (e) {}
+  }, []);
+
   const fetchData = async (overrideDate?: string) => {
     try {
       const activeDate = overrideDate !== undefined ? overrideDate : (reportDate === 'custom' ? customReportDate : reportDate);
@@ -142,10 +161,50 @@ export default function AdminDashboardPage() {
       const dataStore = await resStore.json();
       const dataPromos = await resPromos.json();
 
-      if (dataReport.success) {
-        setReport(dataReport.data);
-        if (prevOrderCountRef.current > 0 && dataReport.data.totalOrders > prevOrderCountRef.current) {
-          if (audioEnabled) {
+      if (dataReport.success && dataReport.data) {
+        const incomingReport = dataReport.data;
+
+        setReport((prevReport) => {
+          // Jika instance lambda serverless baru mengembalikan data kosong sementara state sebelumnya memiliki data
+          if (
+            prevReport &&
+            prevReport.totalOrders > 0 &&
+            incomingReport.totalOrders === 0 &&
+            prevReport.recentOrders &&
+            prevReport.recentOrders.length > 0
+          ) {
+            // Self-healing: sinkronkan data yang kita miliki kembali ke backend
+            fetch('/api/orders/sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ orders: prevReport.recentOrders }),
+            }).catch(() => {});
+            return prevReport;
+          }
+
+          // Cek dering lonceng untuk pesanan baru yang belum pernah dilihat
+          let hasNewActiveOrder = false;
+          if (Array.isArray(incomingReport.recentOrders)) {
+            incomingReport.recentOrders.forEach((order: Order) => {
+              if (!seenAdminOrderIdsRef.current.has(order.id)) {
+                seenAdminOrderIdsRef.current.add(order.id);
+                const orderAgeMs = Date.now() - new Date(order.createdAt).getTime();
+                if (
+                  initialAdminLoadRef.current &&
+                  orderAgeMs < 15 * 60 * 1000 &&
+                  (order.status === 'pending_payment' || order.status === 'cooking')
+                ) {
+                  hasNewActiveOrder = true;
+                }
+              }
+            });
+          }
+
+          if (!initialAdminLoadRef.current) {
+            initialAdminLoadRef.current = true;
+          }
+
+          if (hasNewActiveOrder && audioEnabled) {
             startOrderRinging(30);
             setIsBellRinging(true);
             if (bellTimeoutRef.current) clearTimeout(bellTimeoutRef.current);
@@ -153,8 +212,15 @@ export default function AdminDashboardPage() {
               setIsBellRinging(false);
             }, 30000);
           }
-        }
-        prevOrderCountRef.current = dataReport.data.totalOrders;
+
+          try {
+            localStorage.setItem('hrfood_admin_report_cache', JSON.stringify(incomingReport));
+          } catch (e) {}
+
+          return incomingReport;
+        });
+
+        prevOrderCountRef.current = incomingReport.totalOrders;
       }
       if (dataMenu.success) setMenuItems(dataMenu.items);
       if (dataDelivery.success) setDeliverySettings(dataDelivery.data);
@@ -257,6 +323,23 @@ export default function AdminDashboardPage() {
       const res = await fetch('/api/orders/reset', { method: 'POST' });
       const data = await res.json();
       if (data.success) {
+        seenAdminOrderIdsRef.current.clear();
+        try {
+          localStorage.removeItem('hrfood_admin_report_cache');
+          localStorage.removeItem('hrfood_kds_orders_cache');
+        } catch (e) {}
+        setReport({
+          date: new Date().toISOString().split('T')[0],
+          totalOmzet: 0,
+          potentialOmzet: 0,
+          totalOrders: 0,
+          activeOrders: 0,
+          completedOrders: 0,
+          payment: { cashTotal: 0, qrisTotal: 0 },
+          topItems: [],
+          sambalStats: {},
+          recentOrders: [],
+        });
         fetchData();
         setIsResetModalOpen(false);
         alert('Pesanan berhasil direset ke 0! Penomoran pesanan baru berikutnya akan kembali mulai dari ORD-001.');
@@ -755,7 +838,7 @@ export default function AdminDashboardPage() {
   const totalSoldOut = menuItems.filter(m => m.isAvailable === false).length;
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 font-sans pb-16">
+    <div className="min-h-screen bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-sans pb-16 transition-colors duration-200">
       {/* 30-Second Ringing Bell Alert Banner */}
       {isBellRinging && (
         <div className="bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 text-white px-3 sm:px-6 py-2.5 flex items-center justify-between sticky top-0 z-50 shadow-xl border-b border-red-400 animate-pulse">
@@ -789,7 +872,7 @@ export default function AdminDashboardPage() {
       )}
 
       {/* Top Header - Responsive */}
-      <header className="bg-slate-850 border-b border-slate-800 sticky top-0 z-30 shadow-md">
+      <header className="bg-white dark:bg-slate-850 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-30 shadow-sm transition-colors duration-200">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2.5 sm:py-3.5 flex flex-wrap items-center justify-between gap-2.5">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-white/95 p-1 flex items-center justify-center shadow-md shadow-red-950/60 flex-shrink-0">
@@ -797,15 +880,15 @@ export default function AdminDashboardPage() {
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 flex-wrap">
-                <h1 className="text-sm sm:text-lg font-black text-white tracking-tight truncate">
+                <h1 className="text-sm sm:text-lg font-black text-slate-900 dark:text-white tracking-tight truncate">
                   {RESTAURANT_INFO.name}
                 </h1>
                 <span className="bg-red-600/30 text-red-400 border border-red-500/40 text-[10px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider">
                   Owner POS
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 hidden xs:block truncate">
-                {RESTAURANT_INFO.tagline} &bull; Jam: <span className="font-mono text-emerald-400">{currentTime}</span>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 hidden xs:block truncate">
+                {RESTAURANT_INFO.tagline} &bull; Jam: <span className="font-mono text-emerald-600 dark:text-emerald-400">{currentTime}</span>
               </p>
             </div>
           </div>
@@ -833,12 +916,12 @@ export default function AdminDashboardPage() {
               onClick={() => setAudioEnabled(!audioEnabled)}
               className={`flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold border transition ${
                 audioEnabled
-                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20'
-                  : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
+                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20'
+                  : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-700'
               }`}
               title={audioEnabled ? 'Alarm Suara Kasir Aktif' : 'Alarm Senyap'}
             >
-              {audioEnabled ? <Volume2 className="w-3.5 h-3.5 text-amber-400" /> : <VolumeX className="w-3.5 h-3.5" />}
+              {audioEnabled ? <Volume2 className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" /> : <VolumeX className="w-3.5 h-3.5" />}
               <span className="hidden md:inline">{audioEnabled ? 'Alarm: On' : 'Mute'}</span>
             </button>
 
@@ -848,11 +931,11 @@ export default function AdminDashboardPage() {
               className={`flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold border transition active:scale-95 shadow-sm ${
                 isBellRinging
                   ? 'bg-red-600 text-white border-red-500 animate-pulse'
-                  : 'bg-slate-800 hover:bg-slate-750 text-amber-300 border-slate-700'
+                  : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-amber-600 dark:text-amber-300 border-slate-300 dark:border-slate-700'
               }`}
               title="Uji Coba Lonceng Kasir 30 Detik (Klik untuk Nyalakan/Matikan)"
             >
-              <Bell className={`w-3.5 h-3.5 ${isBellRinging ? 'animate-bounce text-white' : 'text-amber-400'}`} />
+              <Bell className={`w-3.5 h-3.5 ${isBellRinging ? 'animate-bounce text-white' : 'text-amber-500 dark:text-amber-400'}`} />
               <span className="hidden sm:inline">{isBellRinging ? 'Stop Bel' : 'Tes Bel (30s)'}</span>
             </button>
 
@@ -867,7 +950,7 @@ export default function AdminDashboardPage() {
 
             <button
               onClick={() => setIsPrintModalOpen(true)}
-              className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
+              className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 transition shadow-sm"
               title="Cetak Ringkasan Penjualan Hari Ini"
             >
               <span>🖨️</span>
@@ -950,14 +1033,14 @@ export default function AdminDashboardPage() {
         </div>
 
         {/* 4 Tab Navigasi */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3 mb-4 sm:mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3 mb-4 sm:mb-6">
           <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar pb-1 sm:pb-0">
             <button
               onClick={() => setActiveTab('analytics')}
               className={`flex items-center gap-1.5 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl font-bold text-xs transition shadow-sm flex-shrink-0 ${
                 activeTab === 'analytics'
                   ? 'bg-red-600 text-white shadow-red-900/30'
-                  : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-750'
+                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-750 border border-slate-200 dark:border-transparent'
               }`}
             >
               <span>📊</span>
@@ -969,7 +1052,7 @@ export default function AdminDashboardPage() {
               className={`flex items-center gap-1.5 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl font-bold text-xs transition shadow-sm flex-shrink-0 ${
                 activeTab === 'catalog'
                   ? 'bg-red-600 text-white shadow-red-900/30'
-                  : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-750'
+                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-750 border border-slate-200 dark:border-transparent'
               }`}
             >
               <span>📝</span>
@@ -981,7 +1064,7 @@ export default function AdminDashboardPage() {
               className={`flex items-center gap-1.5 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl font-bold text-xs transition shadow-sm flex-shrink-0 ${
                 activeTab === 'delivery'
                   ? 'bg-purple-600 text-white shadow-purple-900/30'
-                  : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-750'
+                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-750 border border-slate-200 dark:border-transparent'
               }`}
             >
               <span>🛵</span>
@@ -993,7 +1076,7 @@ export default function AdminDashboardPage() {
               className={`flex items-center gap-1.5 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl font-bold text-xs transition shadow-sm flex-shrink-0 relative ${
                 activeTab === 'stock'
                   ? 'bg-red-600 text-white shadow-red-900/30'
-                  : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-750'
+                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-750 border border-slate-200 dark:border-transparent'
               }`}
             >
               <span>🔴</span>
@@ -1010,7 +1093,7 @@ export default function AdminDashboardPage() {
               className={`flex items-center gap-1.5 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl font-bold text-xs transition shadow-sm flex-shrink-0 relative ${
                 activeTab === 'promo'
                   ? 'bg-amber-600 text-white shadow-amber-900/30'
-                  : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-750'
+                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-750 border border-slate-200 dark:border-transparent'
               }`}
             >
               <span>🎟️</span>

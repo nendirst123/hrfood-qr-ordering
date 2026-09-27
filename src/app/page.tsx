@@ -454,12 +454,27 @@ function OrderingAppContent() {
 
       const data = await res.json();
       if (data.success && data.data) {
+        const createdOrder = data.data;
+
+        // Persist order ke localStorage agar langsung terbaca di halaman /order/[id] tanpa delay/404
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem(`hrfood_order_${createdOrder.id}`, JSON.stringify(createdOrder));
+            localStorage.setItem('hrfood_latest_order', JSON.stringify(createdOrder));
+            const existingHistory = JSON.parse(localStorage.getItem('hrfood_order_history') || '[]');
+            const updatedHistory = [createdOrder, ...existingHistory.filter((o: any) => o.id !== createdOrder.id)].slice(0, 20);
+            localStorage.setItem('hrfood_order_history', JSON.stringify(updatedHistory));
+          } catch (e) {
+            console.warn('LocalStorage save error:', e);
+          }
+        }
+
         setCart([]);
         setAppliedPromo(null);
         setPromoInput('');
         setPromoMessage(null);
         setIsCartOpen(false);
-        router.push(`/order/${data.data.id}`);
+        router.push(`/order/${createdOrder.id}`);
       } else {
         alert(data.error || 'Gagal membuat pesanan.');
       }

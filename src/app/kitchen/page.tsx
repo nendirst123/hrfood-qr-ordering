@@ -40,7 +40,7 @@ import { ThemeToggle } from '@/components/ThemeProvider';
 export default function KitchenDashboardPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [filterStatus, setFilterStatus] = useState<string>('active');
-  const [dateFilter, setDateFilter] = useState<string>('today'); // 'today' | 'yesterday' | 'all' | 'YYYY-MM-DD'
+  const [dateFilter, setDateFilter] = useState<string>('today'); // 'today' | 'yesterday' | 'all' | 'custom'
   const [customDate, setCustomDate] = useState<string>('');
   const [audioEnabled, setAudioEnabled] = useState<boolean>(true);
   const [isBellRinging, setIsBellRinging] = useState<boolean>(false);
@@ -52,7 +52,8 @@ export default function KitchenDashboardPage() {
   const [isResetModalOpen, setIsResetModalOpen] = useState<boolean>(false);
   const [isResetting, setIsResetting] = useState<boolean>(false);
 
-  const prevOrderCountRef = useRef<number>(0);
+  const seenOrderIdsRef = useRef<Set<string>>(new Set());
+  const initialLoadDoneRef = useRef<boolean>(false);
   const bellTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleToggleBellTest = () => {
@@ -71,7 +72,24 @@ export default function KitchenDashboardPage() {
     }
   };
 
-  // Fetch orders based on date
+  // Inisialisasi awal membaca cache KDS dari localStorage (Instant Display)
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem('hrfood_kds_orders_cache');
+      if (cached) {
+        const parsed: Order[] = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setOrders(parsed);
+          parsed.forEach((o) => seenOrderIdsRef.current.add(o.id));
+          setLoading(false);
+        }
+      }
+    } catch (e) {
+      console.warn('Gagal membaca cache KDS:', e);
+    }
+  }, []);
+
+  // Fetch orders based on date dengan Smart Merging & Self-Healing Sync
   const fetchOrders = async () => {
     try {
       const activeDate = dateFilter === 'custom' ? customDate : dateFilter;
@@ -80,9 +98,56 @@ export default function KitchenDashboardPage() {
       if (data.success && Array.isArray(data.data)) {
         const fetched: Order[] = data.data;
 
-        // Cek jika ada pesanan baru masuk pada filter hari ini (Bunyikan bel 30 detik)
-        if ((dateFilter === 'today' || !dateFilter) && prevOrderCountRef.current > 0 && fetched.length > prevOrderCountRef.current) {
-          if (audioEnabled) {
+        setOrders((prevOrders) => {
+          const orderMap = new Map<string, Order>();
+          // Muat pesanan yang sudah ada di layar agar tidak hilang/flapping
+          prevOrders.forEach((o) => orderMap.set(o.id, o));
+
+          let hasChanges = false;
+          let newIncomingActiveOrder = false;
+
+          fetched.forEach((incoming) => {
+            if (!incoming || !incoming.id) return;
+            const existing = orderMap.get(incoming.id);
+
+            // Deteksi pesanan baru untuk dering lonceng
+            if (!seenOrderIdsRef.current.has(incoming.id)) {
+              seenOrderIdsRef.current.add(incoming.id);
+              // Hanya bunyikan jika pesanan baru (dibuat kurang dari 15 menit lalu & belum selesai)
+              const orderAgeMs = Date.now() - new Date(incoming.createdAt).getTime();
+              if (
+                initialLoadDoneRef.current &&
+                orderAgeMs < 15 * 60 * 1000 &&
+                (incoming.status === 'pending_payment' || incoming.status === 'cooking')
+              ) {
+                newIncomingActiveOrder = true;
+              }
+            }
+
+            if (!existing) {
+              orderMap.set(incoming.id, incoming);
+              hasChanges = true;
+            } else {
+              const incomingTime = new Date(incoming.updatedAt || incoming.createdAt).getTime();
+              const existingTime = new Date(existing.updatedAt || existing.createdAt).getTime();
+              if (
+                incomingTime >= existingTime ||
+                incoming.status !== existing.status ||
+                incoming.isPaid !== existing.isPaid
+              ) {
+                orderMap.set(incoming.id, { ...existing, ...incoming });
+                hasChanges = true;
+              }
+            }
+          });
+
+          // Tandai inisialisasi awal selesai
+          if (!initialLoadDoneRef.current) {
+            initialLoadDoneRef.current = true;
+          }
+
+          // Bunyikan lonceng 30 detik jika ada pesanan baru masuk
+          if (newIncomingActiveOrder && audioEnabled) {
             startOrderRinging(30);
             setIsBellRinging(true);
             if (bellTimeoutRef.current) clearTimeout(bellTimeoutRef.current);
@@ -90,9 +155,31 @@ export default function KitchenDashboardPage() {
               setIsBellRinging(false);
             }, 30000);
           }
-        }
-        prevOrderCountRef.current = fetched.length;
-        setOrders(fetched);
+
+          // Jika serverless instance mengembalikan data kosong atau lebih sedikit padahal KDS memiliki orders aktif,
+          // sinkronkan kembali ke server (Self-Healing)
+          if (fetched.length < prevOrders.length && prevOrders.length > 0) {
+            fetch('/api/orders/sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ orders: prevOrders }),
+            }).catch(() => {});
+          }
+
+          if (!hasChanges && orderMap.size === prevOrders.length) {
+            return prevOrders;
+          }
+
+          const merged = Array.from(orderMap.values()).sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+
+          try {
+            localStorage.setItem('hrfood_kds_orders_cache', JSON.stringify(merged));
+          } catch (e) {}
+
+          return merged;
+        });
       }
     } catch (err) {
       console.error('Failed fetching orders:', err);
@@ -119,8 +206,14 @@ export default function KitchenDashboardPage() {
         body: JSON.stringify(payload),
       });
       const data = await res.json();
-      if (data.success) {
-        setOrders((prev) => prev.map((o) => (o.id === orderId ? data.data : o)));
+      if (data.success && data.data) {
+        setOrders((prev) => {
+          const updated = prev.map((o) => (o.id === orderId ? data.data : o));
+          try {
+            localStorage.setItem('hrfood_kds_orders_cache', JSON.stringify(updated));
+          } catch (e) {}
+          return updated;
+        });
       }
     } catch (err) {
       console.error('Update status error:', err);
@@ -149,7 +242,10 @@ export default function KitchenDashboardPage() {
       const data = await res.json();
       if (data.success) {
         setOrders([]);
-        prevOrderCountRef.current = 0;
+        seenOrderIdsRef.current.clear();
+        try {
+          localStorage.removeItem('hrfood_kds_orders_cache');
+        } catch (e) {}
         setIsResetModalOpen(false);
         alert('Pesanan berhasil direset ke 0! Penomoran pesanan berikutnya akan kembali mulai dari ORD-001.');
       } else {
@@ -210,7 +306,7 @@ export default function KitchenDashboardPage() {
   const onDeliveryCount = orders.filter((o) => o.status === 'on_delivery').length;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col transition-colors duration-200">
       {/* 30-Second Ringing Bell Alert Banner for Kitchen Staff */}
       {isBellRinging && (
         <div className="bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 text-white px-3 sm:px-6 py-2.5 flex items-center justify-between sticky top-0 z-50 shadow-xl border-b border-red-400 animate-pulse">
@@ -244,24 +340,24 @@ export default function KitchenDashboardPage() {
       )}
 
       {/* Top Bar Staff Dashboard */}
-      <header className="bg-slate-900 border-b border-slate-800 px-3 sm:px-6 py-2.5 sm:py-3.5 sticky top-0 z-30 shadow-md">
+      <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-3 sm:px-6 py-2.5 sm:py-3.5 sticky top-0 z-30 shadow-sm transition-colors">
         <div className="flex items-center justify-between gap-2 flex-wrap">
           {/* Logo & Info */}
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-white/95 p-1 flex items-center justify-center shadow-md shadow-red-950/60 flex-shrink-0">
+            <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-white dark:bg-slate-800 p-1 flex items-center justify-center shadow-md border border-slate-200 dark:border-slate-700 flex-shrink-0">
               <img src="/hrfood-emblem.png" alt="HR Food" className="w-full h-full object-contain" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 flex-wrap">
-                <h1 className="text-sm sm:text-base font-black text-white truncate">
+                <h1 className="text-sm sm:text-base font-black text-slate-900 dark:text-white truncate">
                   KDS Dapur & Ekspedisi
                 </h1>
-                <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-1.5 py-0.5 rounded-full bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-ping" />
                   LIVE
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 hidden sm:block">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 hidden sm:block">
                 Pantau antrean masak di meja, pesanan delivery kurir, dan takeaway
               </p>
             </div>
@@ -275,10 +371,10 @@ export default function KitchenDashboardPage() {
             {/* Tombol Reset Pesanan (Mulai dari 0) */}
             <button
               onClick={() => setIsResetModalOpen(true)}
-              className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-950/70 hover:bg-rose-900 text-rose-300 border border-rose-800/80 shadow transition active:scale-95"
+              className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/70 dark:hover:bg-rose-900 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/80 shadow transition active:scale-95"
               title="Reset Antrean Pesanan & Mulai dari 0"
             >
-              <RotateCcw className="w-3.5 h-3.5 text-rose-400" />
+              <RotateCcw className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" />
               <span className="hidden xs:inline">Reset Sesi</span>
             </button>
 
@@ -287,12 +383,12 @@ export default function KitchenDashboardPage() {
               onClick={() => setAudioEnabled(!audioEnabled)}
               className={`flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold border transition ${
                 audioEnabled
-                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20'
-                  : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
+                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20'
+                  : 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
               }`}
               title={audioEnabled ? 'Alarm Suara Aktif' : 'Alarm Senyap'}
             >
-              {audioEnabled ? <Volume2 className="w-3.5 h-3.5 text-amber-400" /> : <VolumeX className="w-3.5 h-3.5" />}
+              {audioEnabled ? <Volume2 className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" /> : <VolumeX className="w-3.5 h-3.5" />}
               <span className="hidden sm:inline">{audioEnabled ? 'Alarm: On' : 'Alarm: Mute'}</span>
             </button>
 
@@ -302,11 +398,11 @@ export default function KitchenDashboardPage() {
               className={`flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold border transition active:scale-95 shadow-sm ${
                 isBellRinging
                   ? 'bg-red-600 text-white border-red-500 animate-pulse'
-                  : 'bg-slate-800 hover:bg-slate-750 text-amber-300 border-slate-700'
+                  : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-amber-600 dark:text-amber-300 border-slate-300 dark:border-slate-700'
               }`}
               title="Uji coba suara lonceng pesanan masuk 30 detik (Klik untuk Start/Stop)"
             >
-              <Bell className={`w-3.5 h-3.5 ${isBellRinging ? 'animate-bounce text-white' : 'text-amber-400'}`} />
+              <Bell className={`w-3.5 h-3.5 ${isBellRinging ? 'animate-bounce text-white' : 'text-amber-500 dark:text-amber-400'}`} />
               <span className="hidden md:inline">{isBellRinging ? 'Stop Bel' : 'Tes Bel (30s)'}</span>
             </button>
 
@@ -324,10 +420,10 @@ export default function KitchenDashboardPage() {
             <Link
               href="/"
               target="_blank"
-              className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
+              className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 transition"
               title="Buka Halaman Pemesanan"
             >
-              <ExternalLink className="w-3.5 h-3.5 text-rose-400" />
+              <ExternalLink className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" />
               <span className="hidden md:inline">Menu Tamu</span>
             </Link>
           </div>
@@ -335,20 +431,20 @@ export default function KitchenDashboardPage() {
       </header>
 
       {/* Baris Filter Tanggal (Per Hari) */}
-      <div className="bg-slate-900 border-b border-slate-800 px-3 sm:px-6 py-2 flex items-center justify-between gap-3 overflow-x-auto no-scrollbar">
+      <div className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-3 sm:px-6 py-2 flex items-center justify-between gap-3 overflow-x-auto no-scrollbar transition-colors">
         <div className="flex items-center gap-2 flex-shrink-0">
-          <span className="text-xs font-bold text-slate-400 flex items-center gap-1">
-            <Calendar className="w-3.5 h-3.5 text-amber-400" />
+          <span className="text-xs font-bold text-slate-600 dark:text-slate-400 flex items-center gap-1">
+            <Calendar className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" />
             <span>Tampilkan Hari:</span>
           </span>
 
-          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-bold">
+          <div className="flex items-center gap-1 bg-white dark:bg-slate-950 p-1 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-bold shadow-sm">
             <button
               onClick={() => { setDateFilter('today'); setCustomDate(''); }}
               className={`px-3 py-1 rounded-lg transition ${
                 dateFilter === 'today'
                   ? 'bg-emerald-600 text-white shadow'
-                  : 'text-slate-400 hover:text-white'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               🟢 Hari Ini
@@ -359,7 +455,7 @@ export default function KitchenDashboardPage() {
               className={`px-3 py-1 rounded-lg transition ${
                 dateFilter === 'yesterday'
                   ? 'bg-amber-600 text-white shadow'
-                  : 'text-slate-400 hover:text-white'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               🟡 Kemarin
@@ -370,7 +466,7 @@ export default function KitchenDashboardPage() {
               className={`px-3 py-1 rounded-lg transition ${
                 dateFilter === 'all'
                   ? 'bg-blue-600 text-white shadow'
-                  : 'text-slate-400 hover:text-white'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               🌐 Semua
@@ -380,7 +476,7 @@ export default function KitchenDashboardPage() {
 
         {/* Input Custom Date */}
         <div className="flex items-center gap-2 flex-shrink-0">
-          <span className="text-[11px] text-slate-400 hidden sm:inline">Atau pilih tanggal:</span>
+          <span className="text-[11px] text-slate-500 dark:text-slate-400 hidden sm:inline">Atau pilih tanggal:</span>
           <input
             type="date"
             value={customDate}
@@ -388,24 +484,24 @@ export default function KitchenDashboardPage() {
               setCustomDate(e.target.value);
               setDateFilter(e.target.value ? 'custom' : 'today');
             }}
-            className="bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono"
+            className="bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-2.5 py-1 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-amber-500 font-mono shadow-sm"
           />
         </div>
       </div>
 
       {/* Filter Tabs Bar (Status) */}
-      <div className="bg-slate-900/80 border-b border-slate-800 px-3 sm:px-6 py-2 flex items-center justify-between gap-2 overflow-hidden">
+      <div className="bg-white/90 dark:bg-slate-900/80 border-b border-slate-200 dark:border-slate-800 px-3 sm:px-6 py-2 flex items-center justify-between gap-2 overflow-hidden transition-colors backdrop-blur-sm">
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar scroll-smooth py-0.5 max-w-full">
           <button
             onClick={() => setFilterStatus('active')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 flex-shrink-0 ${
               filterStatus === 'active'
-                ? 'bg-rose-600 text-white shadow-md shadow-rose-900/50'
-                : 'bg-slate-800/80 text-slate-400 hover:bg-slate-800'
+                ? 'bg-rose-600 text-white shadow-md shadow-rose-900/40'
+                : 'bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 border border-slate-200 dark:border-transparent'
             }`}
           >
             <span>Semua Aktif</span>
-            <span className="px-1.5 py-0.2 rounded-full bg-black/30 text-[10px]">
+            <span className="px-1.5 py-0.2 rounded-full bg-black/20 text-[10px]">
               {activeCount}
             </span>
           </button>
@@ -414,14 +510,14 @@ export default function KitchenDashboardPage() {
             onClick={() => setFilterStatus('delivery')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 flex-shrink-0 ${
               filterStatus === 'delivery'
-                ? 'bg-purple-600 text-white shadow-md shadow-purple-900/50'
-                : 'bg-slate-800/80 text-slate-400 hover:bg-slate-800'
+                ? 'bg-purple-600 text-white shadow-md shadow-purple-900/40'
+                : 'bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 border border-slate-200 dark:border-transparent'
             }`}
           >
-            <Bike className="w-3 h-3 text-purple-300" />
+            <Bike className="w-3 h-3 text-purple-500 dark:text-purple-300" />
             <span>🛵 Delivery</span>
             {deliveryCount > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full bg-black/30 text-[10px] text-purple-200">
+              <span className="px-1.5 py-0.2 rounded-full bg-black/20 text-[10px] text-purple-200">
                 {deliveryCount}
               </span>
             )}
@@ -431,14 +527,14 @@ export default function KitchenDashboardPage() {
             onClick={() => setFilterStatus('takeaway')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 flex-shrink-0 ${
               filterStatus === 'takeaway'
-                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-900/50'
-                : 'bg-slate-800/80 text-slate-400 hover:bg-slate-800'
+                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-900/40'
+                : 'bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 border border-slate-200 dark:border-transparent'
             }`}
           >
-            <Package className="w-3 h-3 text-emerald-300" />
+            <Package className="w-3 h-3 text-emerald-500 dark:text-emerald-300" />
             <span>🛍️ Bungkus</span>
             {takeawayCount > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full bg-black/30 text-[10px] text-emerald-200">
+              <span className="px-1.5 py-0.2 rounded-full bg-black/20 text-[10px] text-emerald-200">
                 {takeawayCount}
               </span>
             )}
@@ -448,54 +544,102 @@ export default function KitchenDashboardPage() {
             onClick={() => setFilterStatus('cooking')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 flex-shrink-0 ${
               filterStatus === 'cooking'
-                ? 'bg-amber-600 text-white shadow-md shadow-amber-900/50'
-                : 'bg-slate-800/80 text-slate-400 hover:bg-slate-800'
+                ? 'bg-rose-700 text-white shadow-md shadow-rose-900/40'
+                : 'bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 border border-slate-200 dark:border-transparent'
             }`}
           >
-            <Flame className="w-3 h-3 text-amber-300" />
-            <span>🍳 Dimasak ({cookingCount})</span>
+            <Flame className="w-3 h-3 text-rose-500 dark:text-rose-300" />
+            <span>Sedang Masak</span>
+            {cookingCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-black/20 text-[10px] text-rose-200">
+                {cookingCount}
+              </span>
+            )}
           </button>
 
           <button
             onClick={() => setFilterStatus('on_delivery')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 flex-shrink-0 ${
               filterStatus === 'on_delivery'
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-900/50'
-                : 'bg-slate-800/80 text-slate-400 hover:bg-slate-800'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-900/40'
+                : 'bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 border border-slate-200 dark:border-transparent'
             }`}
           >
-            <Navigation className="w-3 h-3 text-indigo-300" />
-            <span>Diantar Kurir ({onDeliveryCount})</span>
+            <Navigation className="w-3 h-3 text-indigo-500 dark:text-indigo-300" />
+            <span>Dalam Kurir</span>
+            {onDeliveryCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-black/20 text-[10px] text-indigo-200">
+                {onDeliveryCount}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setFilterStatus('pending_payment')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 flex-shrink-0 ${
+              filterStatus === 'pending_payment'
+                ? 'bg-amber-600 text-white shadow-md shadow-amber-900/40'
+                : 'bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 border border-slate-200 dark:border-transparent'
+            }`}
+          >
+            <Clock className="w-3 h-3 text-amber-500 dark:text-amber-300" />
+            <span>Belum Bayar</span>
+          </button>
+
+          <button
+            onClick={() => setFilterStatus('ready')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 flex-shrink-0 ${
+              filterStatus === 'ready'
+                ? 'bg-orange-600 text-white shadow-md shadow-orange-900/40'
+                : 'bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 border border-slate-200 dark:border-transparent'
+            }`}
+          >
+            <Utensils className="w-3 h-3 text-orange-500 dark:text-orange-300" />
+            <span>Siap Saji</span>
           </button>
 
           <button
             onClick={() => setFilterStatus('completed')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 flex-shrink-0 ${
               filterStatus === 'completed'
-                ? 'bg-slate-700 text-white'
-                : 'bg-slate-800/80 text-slate-400 hover:bg-slate-800'
+                ? 'bg-blue-600 text-white shadow-md shadow-blue-900/40'
+                : 'bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 border border-slate-200 dark:border-transparent'
             }`}
           >
-            <CheckCircle2 className="w-3 h-3" />
-            <span>Riwayat Selesai</span>
+            <CheckCircle2 className="w-3 h-3 text-blue-500 dark:text-blue-300" />
+            <span>Selesai</span>
           </button>
         </div>
 
-        {/* View Mode Toggle */}
-        <div className="flex items-center gap-1.5 flex-shrink-0">
-          <button
-            onClick={() => setViewMode(viewMode === 'cards' ? 'compact' : 'cards')}
-            className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition flex items-center gap-1 border border-slate-700"
-            title={viewMode === 'cards' ? 'Beralih ke Tampilan Ringkas' : 'Beralih ke Tampilan Kartu'}
-          >
-            <span>{viewMode === 'cards' ? '📑' : '🔲'}</span>
-            <span className="hidden sm:inline">{viewMode === 'cards' ? 'Ringkas' : 'Kartu'}</span>
-          </button>
+        {/* View Mode Toggle & Manual Refresh */}
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <div className="hidden sm:flex items-center bg-slate-100 dark:bg-slate-950 p-0.5 rounded-xl border border-slate-200 dark:border-slate-800 text-xs">
+            <button
+              onClick={() => setViewMode('cards')}
+              className={`px-2.5 py-1 rounded-lg font-bold transition ${
+                viewMode === 'cards'
+                  ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'
+              }`}
+            >
+              Kartu
+            </button>
+            <button
+              onClick={() => setViewMode('compact')}
+              className={`px-2.5 py-1 rounded-lg font-bold transition ${
+                viewMode === 'compact'
+                  ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'
+              }`}
+            >
+              Tabel
+            </button>
+          </div>
 
           <button
-            onClick={fetchOrders}
-            className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition"
-            title="Segarkan Data"
+            onClick={() => fetchOrders()}
+            className="p-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-xl transition"
+            title="Refresh Pesanan"
           >
             <RefreshCw className="w-4 h-4" />
           </button>
@@ -505,17 +649,17 @@ export default function KitchenDashboardPage() {
       {/* Orders Container */}
       <main className="p-2.5 sm:p-6 flex-1 overflow-y-auto">
         {loading && orders.length === 0 ? (
-          <div className="py-24 text-center text-slate-500">
+          <div className="py-24 text-center text-slate-500 dark:text-slate-400">
             <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-2 text-rose-500" />
-            <p className="text-sm">Menghubungkan ke sistem pesanan HR Food...</p>
+            <p className="text-sm font-semibold">Menghubungkan ke sistem pesanan HR Food...</p>
           </div>
         ) : filteredOrders.length === 0 ? (
-          <div className="py-20 text-center text-slate-500">
-            <CheckCircle2 className="w-12 h-12 stroke-1 mx-auto mb-3 text-slate-700" />
-            <p className="text-sm sm:text-base font-bold text-slate-400">
+          <div className="py-20 text-center text-slate-400 dark:text-slate-500">
+            <CheckCircle2 className="w-12 h-12 stroke-1 mx-auto mb-3 text-slate-300 dark:text-slate-700" />
+            <p className="text-sm sm:text-base font-bold text-slate-600 dark:text-slate-400">
               Tidak ada antrean pesanan pada hari ini / kategori ini
             </p>
-            <p className="text-xs text-slate-600 mt-1">
+            <p className="text-xs text-slate-400 dark:text-slate-600 mt-1">
               Pesanan baru akan muncul otomatis atau ganti filter tanggal di atas.
             </p>
           </div>
@@ -532,17 +676,17 @@ export default function KitchenDashboardPage() {
                   key={order.id}
                   className={`p-3 rounded-xl border transition-all ${
                     isOverdue
-                      ? 'bg-slate-900 border-red-500 ring-2 ring-red-500 animate-pulse'
+                      ? 'bg-white dark:bg-slate-900 border-red-500 ring-2 ring-red-500 animate-pulse'
                       : orderType === 'delivery'
-                      ? 'bg-slate-900 border-purple-500/50 ring-1 ring-purple-500/30'
+                      ? 'bg-white dark:bg-slate-900 border-purple-500/50 ring-1 ring-purple-500/30'
                       : !order.isPaid
-                      ? 'bg-slate-900 border-amber-500/50 ring-1 ring-amber-500/30'
+                      ? 'bg-white dark:bg-slate-900 border-amber-500/50 ring-1 ring-amber-500/30'
                       : order.status === 'cooking'
-                      ? 'bg-slate-900 border-red-500/50 ring-1 ring-red-500/30'
-                      : 'bg-slate-900/60 border-slate-800'
-                  }`}
+                      ? 'bg-white dark:bg-slate-900 border-red-500/50 ring-1 ring-red-500/30'
+                      : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
+                  } shadow-sm`}
                 >
-                  <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2 mb-2">
+                  <div className="flex items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800/80 pb-2 mb-2">
                     <div className="flex items-center gap-2 flex-wrap">
                       {orderType === 'delivery' ? (
                         <span className="text-xs font-black px-2 py-0.5 rounded-md bg-purple-600 text-white flex items-center gap-1">
@@ -553,12 +697,12 @@ export default function KitchenDashboardPage() {
                           <Package className="w-3 h-3" /> BUNGKUS
                         </span>
                       ) : (
-                        <span className="text-sm font-black text-amber-400">
+                        <span className="text-sm font-black text-rose-600 dark:text-amber-400">
                           MEJA {order.tableNumber}
                         </span>
                       )}
-                      <span className="text-[11px] font-mono text-slate-400">{order.orderNumber}</span>
-                      <span className="text-xs text-slate-300 font-medium">({order.customerName})</span>
+                      <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">{order.orderNumber}</span>
+                      <span className="text-xs text-slate-700 dark:text-slate-300 font-medium">({order.customerName})</span>
 
                       {/* SLA Alert Badge */}
                       {isOverdue && (
@@ -570,16 +714,16 @@ export default function KitchenDashboardPage() {
 
                     <div className="flex items-center gap-1.5 flex-shrink-0">
                       <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
-                        isOverdue ? 'bg-red-600 text-white font-black' : 'bg-slate-800 text-slate-300'
+                        isOverdue ? 'bg-red-600 text-white font-black' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
                       }`}>
                         ⏱️ {elapsedMinutes}m
                       </span>
                       {order.isPaid ? (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
                           LUNAS
                         </span>
                       ) : (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/10 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/40">
                           {orderType === 'delivery' ? 'COD' : 'BELUM BAYAR'}
                         </span>
                       )}
@@ -587,56 +731,40 @@ export default function KitchenDashboardPage() {
                   </div>
 
                   {orderType === 'delivery' && (
-                    <div className="mb-2 p-2 bg-purple-950/40 border border-purple-800/50 rounded-lg text-[11px] text-purple-200">
+                    <div className="mb-2 p-2 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/50 rounded-lg text-[11px] text-purple-900 dark:text-purple-200">
                       <p className="line-clamp-1">📍 <strong>Alamat:</strong> {order.deliveryAddress}</p>
-                      {order.deliveryNotes && <p className="text-purple-300">📝 Patokan: {order.deliveryNotes}</p>}
+                      {order.deliveryNotes && <p className="text-purple-700 dark:text-purple-300">📝 Patokan: {order.deliveryNotes}</p>}
                     </div>
                   )}
 
                   {/* Ringkasan Item Pesanan */}
-                  <div className="text-xs text-slate-200 space-y-1 mb-2.5">
+                  <div className="text-xs text-slate-800 dark:text-slate-200 space-y-1 mb-2.5">
                     {order.items.map((item, i) => (
                       <div key={i} className="flex justify-between items-start gap-2">
                         <div>
-                          <span className="font-bold text-white">{item.quantity}x {item.name}</span>
-                          {item.selectedOptions.length > 0 && (
-                            <span className="text-[11px] text-slate-400 ml-1.5">
-                              ({item.selectedOptions.map((o) => o.choiceLabel).join(' • ')})
+                          <span className="font-bold text-slate-900 dark:text-white mr-1.5">{item.quantity}x {item.name}</span>
+                          {item.selectedOptions && item.selectedOptions.length > 0 && (
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                              ({item.selectedOptions.map(o => o.choiceLabel).join(', ')})
                             </span>
                           )}
-                          {item.notes && (
-                            <span className="text-[11px] text-amber-300 block">
-                              📝 &ldquo;{item.notes}&rdquo;
-                            </span>
-                          )}
+                          {item.notes && <span className="text-[10px] text-amber-600 dark:text-amber-300 ml-1.5 font-medium">&ldquo;{item.notes}&rdquo;</span>}
                         </div>
                       </div>
                     ))}
                   </div>
 
-                  {/* Tombol Aksi KDS */}
-                  <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
+                  {/* Action Bar Compact */}
+                  <div className="flex items-center gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-800/80">
                     <button
                       onClick={() => handlePrint(order)}
-                      className="p-2 rounded-lg bg-slate-800 hover:bg-slate-750 text-slate-300"
-                      title="Cetak Tiket"
+                      className="p-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
+                      title="Cetak Tiket Thermal"
                     >
                       <Printer className="w-3.5 h-3.5" />
                     </button>
 
-                    {order.customerPhone && (
-                      <a
-                        href={generateCustomerWhatsAppUrl(order)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-2 rounded-lg bg-emerald-600/30 text-emerald-400 hover:bg-emerald-600/50 transition"
-                        title="Chat WA Pelanggan (Format Pesanan)"
-                      >
-                        <MessageCircle className="w-3.5 h-3.5" />
-                      </a>
-                    )}
-
-                    {!order.isPaid ? (
+                    {order.status === 'pending_payment' ? (
                       <button
                         onClick={() => handleUpdateStatus(order.id, 'cooking', true)}
                         className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 shadow"
@@ -674,7 +802,7 @@ export default function KitchenDashboardPage() {
                         <CheckCircle2 className="w-3.5 h-3.5" /> Selesai Disajikan
                       </button>
                     ) : (
-                      <span className="flex-1 text-center text-xs text-slate-500">Selesai</span>
+                      <span className="flex-1 text-center text-xs text-slate-400">Selesai</span>
                     )}
                   </div>
                 </div>
@@ -696,22 +824,22 @@ export default function KitchenDashboardPage() {
               return (
                 <div
                   key={order.id}
-                  className={`rounded-2xl border flex flex-col justify-between overflow-hidden shadow-lg transition duration-200 ${
+                  className={`rounded-2xl border flex flex-col justify-between overflow-hidden shadow-sm transition duration-200 ${
                     isOverdue
-                      ? 'bg-slate-900 border-red-500 ring-2 ring-red-500 animate-pulse'
+                      ? 'bg-white dark:bg-slate-900 border-red-500 ring-2 ring-red-500 animate-pulse'
                       : orderType === 'delivery'
-                      ? 'bg-slate-900 border-purple-500/60 ring-2 ring-purple-500/30'
+                      ? 'bg-white dark:bg-slate-900 border-purple-500/60 ring-2 ring-purple-500/20'
                       : !order.isPaid
-                      ? 'bg-slate-900 border-amber-500/60 ring-2 ring-amber-500/30'
+                      ? 'bg-white dark:bg-slate-900 border-amber-500/60 ring-2 ring-amber-500/20'
                       : order.status === 'cooking'
-                      ? 'bg-slate-900 border-red-500/60 ring-2 ring-red-500/30'
+                      ? 'bg-white dark:bg-slate-900 border-red-500/60 ring-2 ring-red-500/20'
                       : order.status === 'on_delivery'
-                      ? 'bg-slate-900 border-indigo-500/60 ring-2 ring-indigo-500/30'
-                      : 'bg-slate-900 border-slate-800'
+                      ? 'bg-white dark:bg-slate-900 border-indigo-500/60 ring-2 ring-indigo-500/20'
+                      : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
                   }`}
                 >
                   {/* Card Header */}
-                  <div className="p-3.5 border-b border-slate-800/80 bg-slate-850">
+                  <div className="p-3.5 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-850">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         {orderType === 'delivery' ? (
@@ -725,16 +853,16 @@ export default function KitchenDashboardPage() {
                             <span>BUNGKUS</span>
                           </div>
                         ) : (
-                          <div className="px-2.5 py-1 rounded-xl bg-red-600 text-white font-black text-xs sm:text-sm">
+                          <div className="px-2.5 py-1 rounded-xl bg-red-600 text-white font-black text-xs sm:text-sm shadow">
                             MEJA {order.tableNumber}
                           </div>
                         )}
-                        <span className="font-mono text-xs font-bold text-slate-300">{order.orderNumber}</span>
+                        <span className="font-mono text-xs font-bold text-slate-600 dark:text-slate-300">{order.orderNumber}</span>
                       </div>
 
                       <div className="flex items-center gap-1.5">
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
-                          isOverdue ? 'bg-red-600 text-white font-black animate-pulse' : 'bg-slate-800 text-slate-400'
+                          isOverdue ? 'bg-red-600 text-white font-black animate-pulse' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-400'
                         }`}>
                           ⏱️ {elapsedMinutes}m
                         </span>
@@ -743,40 +871,40 @@ export default function KitchenDashboardPage() {
 
                     {/* SLA Alert Label */}
                     {isOverdue && (
-                      <div className="mt-2 bg-red-600/90 text-white text-[11px] font-black px-2 py-1 rounded-lg flex items-center gap-1 shadow">
+                      <div className="mt-2 bg-red-600 text-white text-[11px] font-black px-2 py-1 rounded-lg flex items-center gap-1 shadow">
                         <AlertTriangle className="w-3.5 h-3.5" />
                         <span>MASAK SUDAH LEBIH 15 MENIT (PRIORITAS)</span>
                       </div>
                     )}
 
                     <div className="mt-2 flex items-center justify-between text-xs">
-                      <span className="text-slate-200 font-semibold truncate max-w-[180px]">
+                      <span className="text-slate-800 dark:text-slate-200 font-semibold truncate max-w-[180px]">
                         👤 {order.customerName}
                       </span>
-                      <span className="text-[10px] text-slate-400">{timeFormatted}</span>
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400">{timeFormatted}</span>
                     </div>
 
                     {/* Informasi Pengantaran */}
                     {orderType === 'delivery' && (
-                      <div className="mt-2.5 p-2 rounded-xl bg-purple-950/60 border border-purple-800/60 text-xs space-y-1">
-                        <div className="flex items-start gap-1.5 text-purple-200">
-                          <MapPin className="w-3.5 h-3.5 text-purple-400 flex-shrink-0 mt-0.5" />
+                      <div className="mt-2.5 p-2 rounded-xl bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800/60 text-xs space-y-1">
+                        <div className="flex items-start gap-1.5 text-purple-900 dark:text-purple-200">
+                          <MapPin className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 flex-shrink-0 mt-0.5" />
                           <p className="line-clamp-2 leading-tight">{order.deliveryAddress}</p>
                         </div>
                         {order.deliveryNotes && (
-                          <p className="text-[10px] text-purple-300 pl-5">
+                          <p className="text-[10px] text-purple-700 dark:text-purple-300 pl-5">
                             Patokan: {order.deliveryNotes}
                           </p>
                         )}
                         {order.customerPhone && (
-                          <div className="pt-1.5 flex items-center justify-between text-[11px] text-purple-200 border-t border-purple-800/40 gap-1.5 flex-wrap">
+                          <div className="pt-1.5 flex items-center justify-between text-[11px] text-purple-900 dark:text-purple-200 border-t border-purple-200 dark:border-purple-800/40 gap-1.5 flex-wrap">
                             <span className="font-mono text-[10px]">WA: {order.customerPhone}</span>
                             <div className="flex items-center gap-1.5">
                               <a
                                 href={generateCustomerWhatsAppUrl(order)}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="px-2 py-0.5 rounded-lg bg-emerald-600/30 text-emerald-400 hover:bg-emerald-600/50 text-[10px] font-bold flex items-center gap-1 transition"
+                                className="px-2 py-0.5 rounded-lg bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-600/30 dark:hover:bg-emerald-600/50 text-emerald-800 dark:text-emerald-400 text-[10px] font-bold flex items-center gap-1 transition"
                                 title="Kirim status pesanan ke Pelanggan via WhatsApp"
                               >
                                 <MessageCircle className="w-3 h-3" /> WA Tamu
@@ -785,7 +913,7 @@ export default function KitchenDashboardPage() {
                                 href={generateCourierWhatsAppUrl(order)}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="px-2 py-0.5 rounded-lg bg-indigo-600/40 text-indigo-300 hover:bg-indigo-600/60 text-[10px] font-bold flex items-center gap-1 transition"
+                                className="px-2 py-0.5 rounded-lg bg-indigo-100 hover:bg-indigo-200 dark:bg-indigo-600/40 dark:hover:bg-indigo-600/60 text-indigo-800 dark:text-indigo-300 text-[10px] font-bold flex items-center gap-1 transition"
                                 title="Kirim tugas pengantaran ke Kurir via WhatsApp"
                               >
                                 <Bike className="w-3 h-3" /> Tugas Kurir
@@ -797,8 +925,8 @@ export default function KitchenDashboardPage() {
                     )}
 
                     {orderType === 'takeaway' && (
-                      <div className="mt-2 p-2 rounded-xl bg-emerald-950/50 border border-emerald-800/50 text-[11px] text-emerald-200 flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                      <div className="mt-2 p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/50 text-[11px] text-emerald-900 dark:text-emerald-200 flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                         <span>Estimasi Ambil: <strong>{order.pickupTime || 'Segera'}</strong></span>
                       </div>
                     )}
@@ -807,10 +935,10 @@ export default function KitchenDashboardPage() {
                   {/* Items List */}
                   <div className="p-3.5 space-y-2.5 flex-1 overflow-y-auto max-h-60 text-xs">
                     {order.items.map((item, idx) => (
-                      <div key={idx} className="pb-2 border-b border-slate-800/60 last:border-0 last:pb-0">
+                      <div key={idx} className="pb-2 border-b border-slate-100 dark:border-slate-800/60 last:border-0 last:pb-0">
                         <div className="flex items-start justify-between gap-2">
-                          <span className="font-bold text-white text-sm">
-                            <span className="text-amber-400 mr-1.5">{item.quantity}x</span>
+                          <span className="font-bold text-slate-900 dark:text-white text-sm">
+                            <span className="text-amber-600 dark:text-amber-400 mr-1.5">{item.quantity}x</span>
                             {item.name}
                           </span>
                         </div>
@@ -820,7 +948,7 @@ export default function KitchenDashboardPage() {
                             {item.selectedOptions.map((opt, i) => (
                               <span
                                 key={i}
-                                className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 font-medium"
+                                className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-medium"
                               >
                                 {opt.choiceLabel}
                               </span>
@@ -829,7 +957,7 @@ export default function KitchenDashboardPage() {
                         )}
 
                         {item.notes && (
-                          <div className="mt-1 text-[11px] text-amber-300 bg-amber-950/50 border border-amber-800/40 px-2 py-0.5 rounded">
+                          <div className="mt-1 text-[11px] text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800/40 px-2 py-0.5 rounded">
                             📝 &ldquo;{item.notes}&rdquo;
                           </div>
                         )}
@@ -838,10 +966,10 @@ export default function KitchenDashboardPage() {
                   </div>
 
                   {/* Card Footer & Action Buttons */}
-                  <div className="p-3.5 bg-slate-850 border-t border-slate-800/80 space-y-2">
+                  <div className="p-3.5 bg-slate-50 dark:bg-slate-850 border-t border-slate-100 dark:border-slate-800/80 space-y-2">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-slate-400">Total Tagihan:</span>
-                      <span className="font-extrabold text-white text-sm">
+                      <span className="text-slate-500 dark:text-slate-400">Total Tagihan:</span>
+                      <span className="font-extrabold text-slate-900 dark:text-white text-sm">
                         Rp {order.total.toLocaleString('id-ID')}
                       </span>
                     </div>
@@ -849,53 +977,53 @@ export default function KitchenDashboardPage() {
                     <div className="flex items-center gap-2 pt-1">
                       <button
                         onClick={() => handlePrint(order)}
-                        className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 transition"
-                        title="Cetak Tiket Dapur (KOT)"
+                        className="p-2 bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-xl transition shadow-sm"
+                        title="Cetak Tiket Pesanan Thermal"
                       >
                         <Printer className="w-4 h-4" />
                       </button>
 
-                      {!order.isPaid ? (
+                      {order.status === 'pending_payment' ? (
                         <button
                           onClick={() => handleUpdateStatus(order.id, 'cooking', true)}
-                          className="flex-1 min-h-[40px] py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow"
+                          className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow"
                         >
-                          <Check className="w-4 h-4 stroke-[3]" /> Konfirmasi Bayar & Masak
+                          <Check className="w-4 h-4 stroke-[3]" /> Konfirmasi & Masak
                         </button>
                       ) : order.status === 'cooking' ? (
                         orderType === 'delivery' ? (
                           <button
                             onClick={() => handleUpdateStatus(order.id, 'on_delivery')}
-                            className="flex-1 min-h-[40px] py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow"
+                            className="flex-1 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow"
                           >
                             <Bike className="w-4 h-4" /> Serahkan ke Kurir
                           </button>
                         ) : (
                           <button
                             onClick={() => handleUpdateStatus(order.id, 'ready')}
-                            className="flex-1 min-h-[40px] py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow"
+                            className="flex-1 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow"
                           >
-                            <Utensils className="w-4 h-4" /> Hidangan Siap
+                            <Utensils className="w-4 h-4" /> Siap Saji / Ambil
                           </button>
                         )
                       ) : order.status === 'on_delivery' ? (
                         <button
                           onClick={() => handleUpdateStatus(order.id, 'completed', true)}
-                          className="flex-1 min-h-[40px] py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow"
+                          className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow"
                         >
-                          <CheckCircle2 className="w-4 h-4" /> Tandai Terkirim / Selesai
+                          <CheckCircle2 className="w-4 h-4" /> Selesai / Terkirim
                         </button>
                       ) : order.status === 'ready' ? (
                         <button
                           onClick={() => handleUpdateStatus(order.id, 'completed')}
-                          className="flex-1 min-h-[40px] py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow"
+                          className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow"
                         >
-                          <CheckCircle2 className="w-4 h-4" /> Sajikan / Serahkan (Selesai)
+                          <CheckCircle2 className="w-4 h-4" /> Selesai Disajikan
                         </button>
                       ) : (
-                        <span className="flex-1 py-2 text-center text-xs font-semibold text-slate-500">
+                        <div className="flex-1 py-2 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-xl text-xs font-bold text-center">
                           Pesanan Selesai
-                        </span>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -909,39 +1037,39 @@ export default function KitchenDashboardPage() {
       {/* MODAL RESET PESANAN (MULAI DARI 0) */}
       {isResetModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-850 border border-slate-700 text-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-700/80 pb-3">
-              <div className="flex items-center gap-2 text-rose-400">
+          <div className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700/80 pb-3">
+              <div className="flex items-center gap-2 text-rose-500 dark:text-rose-400">
                 <AlertTriangle className="w-6 h-6" />
                 <h3 className="text-base font-black">Reset Sesi / Mulai dari Nol</h3>
               </div>
               <button
                 onClick={() => setIsResetModalOpen(false)}
-                className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white"
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="space-y-2 text-xs text-slate-300 leading-relaxed">
+            <div className="space-y-2 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
               <p>
                 Aksi ini akan <strong>mengosongkan seluruh antrean pesanan</strong> di KDS dan kasir. Penomoran pesanan baru berikutnya akan otomatis <strong>kembali mulai dari ORD-001</strong>.
               </p>
-              <div className="bg-slate-900 border border-slate-800 p-3 rounded-xl space-y-1">
-                <p className="text-slate-400">Jumlah Pesanan Saat Ini: <strong className="text-white">{orders.length} Pesanan</strong></p>
-                <p className="text-emerald-400 font-semibold">
+              <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-xl space-y-1">
+                <p className="text-slate-500 dark:text-slate-400">Jumlah Pesanan Saat Ini: <strong className="text-slate-900 dark:text-white">{orders.length} Pesanan</strong></p>
+                <p className="text-emerald-600 dark:text-emerald-400 font-semibold">
                   ✓ Sistem akan otomatis mengunduh file cadangan JSON sebelum data dibersihkan.
                 </p>
               </div>
             </div>
 
-            <div className="space-y-2 pt-2 border-t border-slate-750">
+            <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-750">
               <button
                 type="button"
                 onClick={handleDownloadBackup}
-                className="w-full py-2.5 bg-slate-800 hover:bg-slate-750 border border-slate-700 text-slate-200 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2"
+                className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2"
               >
-                <Download className="w-4 h-4 text-emerald-400" />
+                <Download className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                 <span>Unduh Cadangan Manual Sekarang (.JSON)</span>
               </button>
 
