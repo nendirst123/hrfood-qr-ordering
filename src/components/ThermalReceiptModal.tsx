@@ -31,36 +31,36 @@ export default function ThermalReceiptModal({ order, onClose }: ThermalReceiptMo
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl flex flex-col max-h-[92vh]">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl flex flex-col max-h-[92vh] transition-colors">
         {/* Header Controls (Screen Only) */}
-        <div className="p-4 bg-slate-850 border-b border-slate-800 flex items-center justify-between gap-3">
+        <div className="p-4 bg-slate-50 dark:bg-slate-850 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <div className="p-2 rounded-xl bg-red-600/20 text-red-400 border border-red-500/30">
+            <div className="p-2 rounded-xl bg-red-600/10 dark:bg-red-600/20 text-red-600 dark:text-red-400 border border-red-500/20 dark:border-red-500/30">
               <Printer className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-white">Cetak Struk Thermal</h3>
-              <p className="text-[11px] text-slate-400">Pilihan cetak kasir atau tiket koki dapur</p>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Cetak Struk Thermal</h3>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">Pilihan cetak kasir atau tiket koki dapur</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-xl bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-750 transition"
+            className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-750 transition"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Options Toolbar (Screen Only) */}
-        <div className="p-3 bg-slate-950 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div className="p-3 bg-slate-100 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
           {/* Tipe Cetak */}
-          <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800">
+          <div className="flex items-center gap-1 bg-slate-200/80 dark:bg-slate-900 p-1 rounded-xl border border-slate-300 dark:border-slate-800">
             <button
               onClick={() => setPrintType('customer')}
               className={`px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition ${
                 printType === 'customer'
                   ? 'bg-red-600 text-white shadow'
-                  : 'text-slate-400 hover:text-slate-200'
+                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
               }`}
             >
               <Receipt className="w-3.5 h-3.5" />
@@ -71,7 +71,7 @@ export default function ThermalReceiptModal({ order, onClose }: ThermalReceiptMo
               className={`px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition ${
                 printType === 'kitchen'
                   ? 'bg-amber-600 text-white shadow'
-                  : 'text-slate-400 hover:text-slate-200'
+                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
               }`}
             >
               <ChefHat className="w-3.5 h-3.5" />
@@ -80,13 +80,13 @@ export default function ThermalReceiptModal({ order, onClose }: ThermalReceiptMo
           </div>
 
           {/* Ukuran Thermal */}
-          <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800">
+          <div className="flex items-center gap-1 bg-slate-200/80 dark:bg-slate-900 p-1 rounded-xl border border-slate-300 dark:border-slate-800">
             <button
               onClick={() => setPaperWidth('58mm')}
               className={`px-2.5 py-1.5 rounded-lg font-bold transition ${
                 paperWidth === '58mm'
-                  ? 'bg-slate-700 text-white shadow'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow'
+                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
               }`}
               title="Thermal Mini Bluetooth 58mm"
             >
@@ -96,8 +96,8 @@ export default function ThermalReceiptModal({ order, onClose }: ThermalReceiptMo
               onClick={() => setPaperWidth('80mm')}
               className={`px-2.5 py-1.5 rounded-lg font-bold transition ${
                 paperWidth === '80mm'
-                  ? 'bg-slate-700 text-white shadow'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow'
+                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
               }`}
               title="Thermal POS Standar 80mm"
             >
@@ -107,7 +107,7 @@ export default function ThermalReceiptModal({ order, onClose }: ThermalReceiptMo
         </div>
 
         {/* Live Visual Thermal Receipt Paper Preview */}
-        <div className="p-4 sm:p-6 overflow-y-auto bg-slate-950 flex justify-center">
+        <div className="p-4 sm:p-6 overflow-y-auto bg-slate-200/70 dark:bg-slate-950 flex justify-center">
           <div
             id="printable-receipt"
             className={`${paperWidth === '58mm' ? 'print-58mm max-w-[280px]' : 'print-80mm max-w-[360px]'} w-full bg-white text-black font-mono text-xs p-4 sm:p-5 shadow-2xl rounded-sm transition-all`}
@@ -276,11 +276,11 @@ export default function ThermalReceiptModal({ order, onClose }: ThermalReceiptMo
         </div>
 
         {/* Action Buttons (Screen Only) */}
-        <div className="p-4 bg-slate-850 border-t border-slate-800 flex items-center justify-end gap-2.5">
+        <div className="p-4 bg-slate-50 dark:bg-slate-850 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2.5">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-800 text-slate-300 hover:bg-slate-750 transition"
+            className="px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 text-slate-750 dark:text-slate-300 dark:hover:bg-slate-750 transition"
           >
             Tutup
           </button>

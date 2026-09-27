@@ -103,4 +103,9 @@ export interface StoreConfig {
   openTime: string; // "10:00"
   closeTime: string; // "22:00"
   closedMessage: string;
+  storeAddress?: string; // Alamat fisik resto
+  storeLatitude?: number; // Titik GPS latitude toko
+  storeLongitude?: number; // Titik GPS longitude toko
+  storePhone?: string; // Nomor WhatsApp resmi toko
 }
+

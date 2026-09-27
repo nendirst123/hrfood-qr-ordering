@@ -16,50 +16,58 @@ export interface VillagePreset {
   id: string;
   name: string;
   description: string;
-  coords: Coordinates;
+  nominalKm: number;
+  coords?: Coordinates;
 }
 
 export const LOCAL_VILLAGE_PRESETS: VillagePreset[] = [
   {
     id: 'preset-desa-pusat',
     name: 'Desa Krajan / Sekitar Resto (< 1 km)',
-    description: 'Area pasar, balai desa, dan pertokoan pusat HR Food',
+    description: 'Area pasar, balai desa, dan pertokoan dekat HR Food',
+    nominalKm: 0.8,
     coords: { latitude: -6.9182, longitude: 107.6210 },
   },
   {
     id: 'preset-sukamaju',
     name: 'Dusun Sukamaju / Babakan (~1.8 km)',
     description: 'Pemukiman warga, pondok pesantren, dan masjid jami',
+    nominalKm: 1.8,
     coords: { latitude: -6.9240, longitude: 107.6315 },
   },
   {
     id: 'preset-karanganyar',
     name: 'Desa Karanganyar & Rawasari (~2.7 km)',
     description: 'Perkampungan timur, sekolah SMP/SMA, dan lapangan desa',
+    nominalKm: 2.7,
     coords: { latitude: -6.9325, longitude: 107.6360 },
   },
   {
     id: 'preset-griya-asri',
     name: 'Perumahan Griya Indah / Asri (~4.2 km)',
     description: 'Komplek perumahan, ruko baru, dan klinik kesehatan',
+    nominalKm: 4.2,
     coords: { latitude: -6.9440, longitude: 107.6430 },
   },
   {
     id: 'preset-mekarwangi',
     name: 'Desa Mekarwangi & Sekitarnya (~5.8 km)',
     description: 'Jalur jalan raya utama dan perkampungan barat',
+    nominalKm: 5.8,
     coords: { latitude: -6.9580, longitude: 107.6520 },
   },
   {
     id: 'preset-industri',
     name: 'Kawasan Pabrik & Pergudangan (~7.5 km)',
     description: 'Area industri, mess karyawan, dan gerbang tol',
+    nominalKm: 7.5,
     coords: { latitude: -6.9710, longitude: 107.6610 },
   },
   {
     id: 'preset-luar-wilayah',
-    name: 'Perbatasan / Luar Kecamatan (> 8 km)',
-    description: 'Wilayah tetangga kecamatan / pegunungan',
+    name: 'Perbatasan / Luar Kecamatan (~9.5 km)',
+    description: 'Wilayah tetangga kecamatan / perbatasan',
+    nominalKm: 9.5,
     coords: { latitude: -6.9950, longitude: 107.6850 },
   },
 ];

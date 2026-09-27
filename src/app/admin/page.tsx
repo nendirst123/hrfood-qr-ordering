@@ -9,7 +9,7 @@ import { playNewOrderChime, startOrderRinging, stopOrderRinging, isOrderRinging 
 import { generateCustomerWhatsAppUrl, generateCourierWhatsAppUrl } from '@/lib/whatsapp-helper';
 import ThermalReceiptModal from '@/components/ThermalReceiptModal';
 import { ThemeToggle } from '@/components/ThemeProvider';
-import { Bell, Volume2, VolumeX, Store, Clock, Power } from 'lucide-react';
+import { Bell, Volume2, VolumeX, Store, Clock, Power, MapPin, Navigation, Compass, ExternalLink, Phone, MessageCircle } from 'lucide-react';
 
 interface ReportData {
   date: string;
@@ -86,6 +86,12 @@ export default function AdminDashboardPage() {
   const [formOpenTime, setFormOpenTime] = useState('10:00');
   const [formCloseTime, setFormCloseTime] = useState('22:00');
   const [formClosedMessage, setFormClosedMessage] = useState('');
+  const [formStoreAddress, setFormStoreAddress] = useState('Jl. Babakan No. 12, Resto HR Food');
+  const [formStoreLatitude, setFormStoreLatitude] = useState<number | string>(-6.9175);
+  const [formStoreLongitude, setFormStoreLongitude] = useState<number | string>(107.6191);
+  const [formStorePhone, setFormStorePhone] = useState('0838-3843-2860');
+  const [isDetectingStoreGps, setIsDetectingStoreGps] = useState(false);
+  const [storeGpsStatus, setStoreGpsStatus] = useState<string | null>(null);
 
   // Delivery Settings State
   const [deliverySettings, setDeliverySettings] = useState<DeliverySettings | null>(null);
@@ -232,6 +238,10 @@ export default function AdminDashboardPage() {
         setFormOpenTime(dataStore.data.openTime || '10:00');
         setFormCloseTime(dataStore.data.closeTime || '22:00');
         setFormClosedMessage(dataStore.data.closedMessage || '');
+        setFormStoreAddress(dataStore.data.storeAddress || 'Jl. Babakan No. 12, Resto HR Food');
+        setFormStoreLatitude(dataStore.data.storeLatitude ?? -6.9175);
+        setFormStoreLongitude(dataStore.data.storeLongitude ?? 107.6191);
+        setFormStorePhone(dataStore.data.storePhone || '0838-3843-2860');
       }
     } catch (err) {
       console.error('Failed fetching admin data:', err);
@@ -540,6 +550,10 @@ export default function AdminDashboardPage() {
         openTime: formOpenTime,
         closeTime: formCloseTime,
         closedMessage: formClosedMessage,
+        storeAddress: formStoreAddress,
+        storeLatitude: Number(formStoreLatitude) || -6.9175,
+        storeLongitude: Number(formStoreLongitude) || 107.6191,
+        storePhone: formStorePhone,
       };
       const res = await fetch('/api/store-config', {
         method: 'POST',
@@ -550,7 +564,7 @@ export default function AdminDashboardPage() {
       if (data.success) {
         setStoreConfig(data.data);
         setIsStoreModalOpen(false);
-        alert('Pengaturan jam operasional dan status toko berhasil disimpan!');
+        alert('Pengaturan status toko, alamat fisik, koordinat GPS, dan nomor WhatsApp berhasil disimpan!');
       } else {
         alert('Gagal menyimpan: ' + data.error);
       }
@@ -560,6 +574,30 @@ export default function AdminDashboardPage() {
     } finally {
       setIsSavingStore(false);
     }
+  };
+
+  const handleDetectStoreGps = () => {
+    if (typeof window === 'undefined' || !navigator.geolocation) {
+      setStoreGpsStatus('Browser Anda tidak mendukung deteksi GPS.');
+      return;
+    }
+    setIsDetectingStoreGps(true);
+    setStoreGpsStatus('Sedang membaca koordinat GPS perangkat Anda...');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = Number(pos.coords.latitude.toFixed(6));
+        const lng = Number(pos.coords.longitude.toFixed(6));
+        setFormStoreLatitude(lat);
+        setFormStoreLongitude(lng);
+        setIsDetectingStoreGps(false);
+        setStoreGpsStatus(`✅ Titik GPS Toko Berhasil Terkunci: ${lat}, ${lng}`);
+      },
+      (err) => {
+        setIsDetectingStoreGps(false);
+        setStoreGpsStatus('⚠️ Gagal mendeteksi GPS. Pastikan izin akses lokasi aktif di browser.');
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
   };
 
   // DELIVERY SETTINGS MANAGEMENT
@@ -963,70 +1001,70 @@ export default function AdminDashboardPage() {
       <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 mt-4 sm:mt-6">
         {/* KPI METRIC CARDS */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 mb-4 sm:mb-6">
-          <div className="bg-gradient-to-br from-slate-800 to-slate-850 border border-slate-700/80 rounded-xl sm:rounded-2xl p-3 sm:p-5 shadow-lg relative overflow-hidden">
+          <div className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-xl sm:rounded-2xl p-3 sm:p-5 shadow-sm dark:shadow-lg relative overflow-hidden transition-colors">
             <div className="absolute top-0 right-0 w-16 sm:w-24 h-16 sm:h-24 bg-emerald-500/10 rounded-full blur-xl" />
             <div className="flex items-center justify-between mb-1 sm:mb-2">
-              <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider">Omzet Lunas</span>
+              <span className="text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Omzet Lunas</span>
               <span className="text-base sm:text-xl">💰</span>
             </div>
-            <div className="text-base sm:text-2xl font-black text-emerald-400 tracking-tight truncate">
+            <div className="text-base sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight truncate">
               {toIdr(report?.totalOmzet || 0)}
             </div>
-            <p className="text-[10px] sm:text-[11px] text-slate-400 mt-1 truncate">
-              Potensi: <span className="text-slate-300 font-semibold">{toIdr(report?.potentialOmzet || 0)}</span>
+            <p className="text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 mt-1 truncate">
+              Potensi: <span className="text-slate-700 dark:text-slate-300 font-semibold">{toIdr(report?.potentialOmzet || 0)}</span>
             </p>
           </div>
 
-          <div className="bg-gradient-to-br from-slate-800 to-slate-850 border border-slate-700/80 rounded-xl sm:rounded-2xl p-3 sm:p-5 shadow-lg relative overflow-hidden">
+          <div className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-xl sm:rounded-2xl p-3 sm:p-5 shadow-sm dark:shadow-lg relative overflow-hidden transition-colors">
             <div className="absolute top-0 right-0 w-16 sm:w-24 h-16 sm:h-24 bg-blue-500/10 rounded-full blur-xl" />
             <div className="flex items-center justify-between mb-1 sm:mb-2">
-              <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider">Total Transaksi</span>
+              <span className="text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Total Transaksi</span>
               <span className="text-base sm:text-xl">🧾</span>
             </div>
-            <div className="text-base sm:text-2xl font-black text-white tracking-tight">
-              {report?.totalOrders || 0} <span className="text-[11px] sm:text-xs font-medium text-slate-400">Order</span>
+            <div className="text-base sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+              {report?.totalOrders || 0} <span className="text-[11px] sm:text-xs font-medium text-slate-500 dark:text-slate-400">Order</span>
             </div>
-            <p className="text-[10px] sm:text-[11px] text-slate-400 mt-1 truncate">
-              <span className="text-emerald-400 font-bold">{report?.completedOrders || 0} Selesai</span> &bull; {report?.activeOrders || 0} Aktif
+            <p className="text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 mt-1 truncate">
+              <span className="text-emerald-600 dark:text-emerald-400 font-bold">{report?.completedOrders || 0} Selesai</span> &bull; {report?.activeOrders || 0} Aktif
             </p>
           </div>
 
-          <div className="bg-gradient-to-br from-slate-800 to-slate-850 border border-slate-700/80 rounded-xl sm:rounded-2xl p-3 sm:p-5 shadow-lg relative overflow-hidden">
+          <div className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-xl sm:rounded-2xl p-3 sm:p-5 shadow-sm dark:shadow-lg relative overflow-hidden transition-colors">
             <div className="absolute top-0 right-0 w-16 sm:w-24 h-16 sm:h-24 bg-purple-500/10 rounded-full blur-xl" />
             <div className="flex items-center justify-between mb-1 sm:mb-2">
-              <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider">Status Delivery</span>
+              <span className="text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status Delivery</span>
               <span className="text-base sm:text-xl">🛵</span>
             </div>
-            <div className="text-sm sm:text-xl font-black text-purple-300">
+            <div className="text-sm sm:text-xl font-black text-purple-600 dark:text-purple-300">
               {deliverySettings?.isEnabled ? (
-                <span className="text-emerald-400 flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" /> AKTIF ONLINE
+                <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping inline-block" /> AKTIF ONLINE
                 </span>
               ) : (
-                <span className="text-rose-400">NON-AKTIF</span>
+                <span className="text-rose-600 dark:text-rose-400">NON-AKTIF</span>
               )}
             </div>
-            <p className="text-[10px] sm:text-[11px] text-slate-400 mt-1 truncate">
+            <p className="text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 mt-1 truncate">
               {deliverySettings?.zones?.length || 0} Zona Tarif Terdaftar
             </p>
           </div>
 
-          <div className="bg-gradient-to-br from-slate-800 to-slate-850 border border-slate-700/80 rounded-xl sm:rounded-2xl p-3 sm:p-5 shadow-lg relative overflow-hidden">
+          <div className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-xl sm:rounded-2xl p-3 sm:p-5 shadow-sm dark:shadow-lg relative overflow-hidden transition-colors">
             <div className="absolute top-0 right-0 w-16 sm:w-24 h-16 sm:h-24 bg-red-500/10 rounded-full blur-xl" />
             <div className="flex items-center justify-between mb-1 sm:mb-2">
-              <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider">Katalog Menu</span>
+              <span className="text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Katalog Menu</span>
               <span className="text-base sm:text-xl">🍗</span>
             </div>
-            <div className="text-base sm:text-2xl font-black text-white tracking-tight">
-              {menuItems.length} <span className="text-[11px] sm:text-xs font-medium text-emerald-400">Menu</span>
+            <div className="text-base sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+              {menuItems.length} <span className="text-[11px] sm:text-xs font-medium text-emerald-600 dark:text-emerald-400">Menu</span>
             </div>
             <p className="text-[10px] sm:text-[11px] mt-1 truncate">
               {totalSoldOut > 0 ? (
-                <span className="text-red-400 font-bold bg-red-950/60 border border-red-800/80 px-1.5 py-0.5 rounded">
+                <span className="text-red-600 dark:text-red-400 font-bold bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-800/80 px-1.5 py-0.5 rounded">
                   ⚠️ {totalSoldOut} Habis
                 </span>
               ) : (
-                <span className="text-emerald-400 font-semibold">Semua tersedia</span>
+                <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Semua tersedia</span>
               )}
             </p>
           </div>
@@ -1429,7 +1467,7 @@ export default function AdminDashboardPage() {
         {/* TAB 2: KELOLA KATALOG MENU (OWNER CRUD) */}
         {activeTab === 'catalog' && (
           <div className="space-y-6">
-            <div className="bg-slate-850 border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-wrap items-center justify-between gap-4">
+            <div className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm dark:shadow-xl flex flex-wrap items-center justify-between gap-4 transition-colors">
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
                 {CATEGORIES.map(cat => (
                   <button
@@ -1438,7 +1476,7 @@ export default function AdminDashboardPage() {
                     className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition ${
                       selectedCategory === cat
                         ? 'bg-amber-400 text-slate-950 shadow'
-                        : 'bg-slate-800 text-slate-300 hover:bg-slate-750'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-750'
                     }`}
                   >
                     {cat}
@@ -1452,7 +1490,7 @@ export default function AdminDashboardPage() {
                   placeholder="Cari menu di katalog..."
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-red-500"
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-red-500"
                 />
               </div>
             </div>
@@ -1461,10 +1499,10 @@ export default function AdminDashboardPage() {
               {filteredMenu.map(item => (
                 <div
                   key={item.id}
-                  className="bg-slate-850 border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-col justify-between"
+                  className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm dark:shadow-xl flex flex-col justify-between transition-colors"
                 >
                   <div className="flex gap-3">
-                    <div className="relative w-20 h-20 rounded-xl overflow-hidden bg-slate-800 flex-shrink-0 border border-slate-750">
+                    <div className="relative w-20 h-20 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 flex-shrink-0 border border-slate-200 dark:border-slate-750">
                       <img
                         src={item.image}
                         alt={item.name}
@@ -1479,22 +1517,22 @@ export default function AdminDashboardPage() {
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-1">
-                        <h3 className="font-bold text-sm text-white truncate">{item.name}</h3>
-                        <span className="text-xs font-bold text-emerald-400 whitespace-nowrap">
+                        <h3 className="font-bold text-sm text-slate-900 dark:text-white truncate">{item.name}</h3>
+                        <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
                           {toIdr(item.price)}
                         </span>
                       </div>
-                      <p className="text-[11px] text-slate-400 line-clamp-2 mt-1">{item.description}</p>
-                      <span className="inline-block text-[10px] text-slate-400 bg-slate-800 px-2 py-0.5 rounded-full mt-2">
+                      <p className="text-[11px] text-slate-600 dark:text-slate-400 line-clamp-2 mt-1">{item.description}</p>
+                      <span className="inline-block text-[10px] text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full mt-2">
                         {item.category}
                       </span>
                     </div>
                   </div>
 
-                  <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between gap-2">
+                  <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5">
-                      <span className={`w-2 h-2 rounded-full ${item.isAvailable !== false ? 'bg-emerald-400' : 'bg-red-500'}`} />
-                      <span className="text-[11px] text-slate-300">
+                      <span className={`w-2 h-2 rounded-full ${item.isAvailable !== false ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                      <span className="text-[11px] text-slate-700 dark:text-slate-300 font-medium">
                         {item.isAvailable !== false ? 'Tersedia' : 'Habis'}
                       </span>
                     </div>
@@ -1505,14 +1543,14 @@ export default function AdminDashboardPage() {
                           setEditingItem({ ...item });
                           setIsEditModalOpen(true);
                         }}
-                        className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg text-xs font-bold transition flex items-center gap-1"
+                        className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 rounded-lg text-xs font-bold transition flex items-center gap-1"
                       >
                         <span>✏️</span> Edit
                       </button>
 
                       <button
                         onClick={() => handleDeleteMenu(item)}
-                        className="px-2 py-1 bg-red-950/60 hover:bg-red-900 text-red-300 border border-red-800/80 rounded-lg text-xs font-bold transition"
+                        className="px-2 py-1 bg-red-50 hover:bg-red-100 dark:bg-red-950/60 dark:hover:bg-red-900 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800/80 rounded-lg text-xs font-bold transition"
                         title="Hapus Menu"
                       >
                         🗑️
@@ -1525,23 +1563,89 @@ export default function AdminDashboardPage() {
           </div>
         )}
 
-        {/* TAB 3: KELOLA ONGKIR & DELIVERY (NEW!) */}
+        {/* TAB 3: KELOLA ONGKIR & DELIVERY */}
         {activeTab === 'delivery' && (
           <div className="space-y-6">
+            {/* KARTU KHUSUS: LOKASI FISIK RESTO & TITIK GPS TOKO */}
+            <div className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6 shadow-sm dark:shadow-xl space-y-4 transition-colors">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-750 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+                    <MapPin className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+                      Lokasi Resto & Titik GPS Toko
+                    </h2>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Pangkal titik nol untuk menghitung jarak kilometer & ongkos kirim ke pembeli
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setIsStoreModalOpen(true)}
+                    className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow"
+                  >
+                    <span>📍</span> Ubah Lokasi & GPS Toko
+                  </button>
+                  <a
+                    href={`https://www.google.com/maps?q=${storeConfig?.storeLatitude || -6.9175},${storeConfig?.storeLongitude || 107.6191}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                    <span>Buka Maps</span>
+                  </a>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                <div className="bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 p-3 rounded-xl">
+                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">
+                    Alamat Fisik Resto:
+                  </span>
+                  <p className="text-xs font-bold text-slate-900 dark:text-white leading-relaxed">
+                    {storeConfig?.storeAddress || 'Jl. Babakan No. 12, Resto HR Food'}
+                  </p>
+                </div>
+
+                <div className="bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 p-3 rounded-xl">
+                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">
+                    Koordinat GPS Toko:
+                  </span>
+                  <p className="text-xs font-mono font-bold text-purple-700 dark:text-purple-300">
+                    {storeConfig?.storeLatitude ?? -6.9175}, {storeConfig?.storeLongitude ?? 107.6191}
+                  </p>
+                </div>
+
+                <div className="bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 p-3 rounded-xl">
+                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">
+                    WhatsApp Resto / Owner:
+                  </span>
+                  <p className="text-xs font-mono font-bold text-emerald-700 dark:text-emerald-400">
+                    {storeConfig?.storePhone || '0838-3843-2860'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
             {/* Header Delivery Toggle Card */}
-            <div className="bg-slate-850 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+            <div className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6 shadow-sm dark:shadow-xl space-y-4 transition-colors">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-750 pb-4">
                 <div>
-                  <h2 className="text-base font-black text-white flex items-center gap-2">
+                  <h2 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
                     <span>🛵</span> Konfigurasi Layanan Pesan Antar Online
                   </h2>
-                  <p className="text-xs text-slate-400 mt-0.5">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                     Aktifkan pengantaran makanan ke rumah, atur nomor WhatsApp kurir, dan biaya per zona wilayah
                   </p>
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <span className="text-xs font-bold text-slate-300">
+                  <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
                     Status Layanan:
                   </span>
                   <button
@@ -1549,7 +1653,7 @@ export default function AdminDashboardPage() {
                     className={`px-4 py-2 rounded-xl text-xs font-black transition flex items-center gap-1.5 shadow ${
                       deliverySettings?.isEnabled
                         ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                        : 'bg-rose-900 text-rose-200 border border-rose-700'
+                        : 'bg-rose-100 hover:bg-rose-200 dark:bg-rose-900 text-rose-700 dark:text-rose-200 border border-rose-300 dark:border-rose-700'
                     }`}
                   >
                     <span>{deliverySettings?.isEnabled ? '✅ BUKA PESANAN' : '🔒 TUTUP SEMENTARA'}</span>
@@ -1561,21 +1665,21 @@ export default function AdminDashboardPage() {
               {deliverySettings && (
                 <form onSubmit={handleSaveDeliveryGeneral} className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
                   <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1">
-                      Nomor WhatsApp Resto / Kurir *
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Nomor WhatsApp Kurir / Resto *
                     </label>
                     <input
                       type="text"
                       value={deliverySettings.whatsappNumber || ''}
                       onChange={e => setDeliverySettings({ ...deliverySettings, whatsappNumber: e.target.value })}
-                      placeholder="Contoh: 6281234567890"
-                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500 font-mono"
+                      placeholder="Contoh: 6283838432860"
+                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-purple-500 font-mono"
                     />
-                    <span className="text-[10px] text-slate-400 mt-1 block">Gunakan kode negara (62...)</span>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 block">Gunakan kode negara (62...)</span>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1">
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                       Minimal Belanja Delivery (Rp)
                     </label>
                     <input
@@ -1583,13 +1687,13 @@ export default function AdminDashboardPage() {
                       value={deliverySettings.minOrderAmount || 0}
                       onChange={e => setDeliverySettings({ ...deliverySettings, minOrderAmount: Number(e.target.value) })}
                       placeholder="Contoh: 15000"
-                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500 font-mono"
+                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-purple-500 font-mono"
                     />
-                    <span className="text-[10px] text-slate-400 mt-1 block">Batas minimum pesanan diantar</span>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 block">Batas minimum pesanan diantar</span>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1">
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                       Gratis Ongkir Jika Belanja &gt; (Rp)
                     </label>
                     <div className="flex gap-2">
@@ -1598,30 +1702,30 @@ export default function AdminDashboardPage() {
                         value={deliverySettings.freeDeliveryThreshold || 0}
                         onChange={e => setDeliverySettings({ ...deliverySettings, freeDeliveryThreshold: Number(e.target.value) })}
                         placeholder="Contoh: 150000"
-                        className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500 font-mono"
+                        className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-purple-500 font-mono"
                       />
                       <button
                         type="submit"
                         disabled={isSavingDelivery}
-                        className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow transition whitespace-nowrap"
+                        className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow transition whitespace-nowrap active:scale-95"
                       >
                         {isSavingDelivery ? '...' : '💾 Simpan'}
                       </button>
                     </div>
-                    <span className="text-[10px] text-slate-400 mt-1 block">Promo subsidi gratis ongkir</span>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 block">Promo subsidi gratis ongkir</span>
                   </div>
                 </form>
               )}
             </div>
 
             {/* List Zona Ongkir */}
-            <div className="bg-slate-850 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+            <div className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6 shadow-sm dark:shadow-xl space-y-4 transition-colors">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
                     Daftar Zona Tarif Pengantaran ({deliverySettings?.zones?.length || 0})
                   </h3>
-                  <p className="text-xs text-slate-400">Atur ongkir berdasarkan radius jarak atau area kelurahan/kota</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Atur ongkir berdasarkan radius jarak atau area kelurahan/kota</p>
                 </div>
                 <button
                   onClick={() => handleOpenZoneModal()}
@@ -1635,30 +1739,30 @@ export default function AdminDashboardPage() {
                 {deliverySettings?.zones?.map(zone => (
                   <div
                     key={zone.id}
-                    className={`bg-slate-800/90 border rounded-2xl p-4 shadow flex flex-col justify-between transition ${
-                      zone.isActive ? 'border-purple-500/50' : 'border-slate-700 opacity-60'
+                    className={`bg-slate-50 dark:bg-slate-800/90 border rounded-2xl p-4 shadow-sm flex flex-col justify-between transition ${
+                      zone.isActive ? 'border-purple-400/50 dark:border-purple-500/50' : 'border-slate-200 dark:border-slate-700 opacity-60'
                     }`}
                   >
                     <div>
                       <div className="flex items-start justify-between gap-2 mb-1.5">
-                        <h4 className="font-bold text-sm text-white">{zone.name}</h4>
-                        <span className="text-sm font-black text-purple-400 whitespace-nowrap">
+                        <h4 className="font-bold text-sm text-slate-900 dark:text-white">{zone.name}</h4>
+                        <span className="text-sm font-black text-purple-700 dark:text-purple-400 whitespace-nowrap">
                           {toIdr(zone.fee)}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-300 leading-relaxed mb-2">{zone.description}</p>
-                      <span className="inline-block text-[11px] font-mono bg-slate-750 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded-lg">
+                      <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed mb-2">{zone.description}</p>
+                      <span className="inline-block text-[11px] font-mono bg-purple-100 dark:bg-slate-750 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-500/30 px-2 py-0.5 rounded-lg">
                         ⏱️ Estimasi: {zone.estimatedTime}
                       </span>
                     </div>
 
-                    <div className="mt-4 pt-3 border-t border-slate-750 flex items-center justify-between">
+                    <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-750 flex items-center justify-between">
                       <button
                         onClick={() => handleToggleZoneActive(zone)}
                         className={`text-[11px] font-bold px-2 py-0.5 rounded-lg transition ${
                           zone.isActive
-                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                            : 'bg-slate-700 text-slate-400'
+                            ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
+                            : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
                         }`}
                       >
                         {zone.isActive ? '✓ Aktif' : 'Non-Aktif'}
@@ -1667,13 +1771,13 @@ export default function AdminDashboardPage() {
                       <div className="flex items-center gap-1.5">
                         <button
                           onClick={() => handleOpenZoneModal(zone)}
-                          className="px-2.5 py-1 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 rounded-lg text-xs font-bold transition"
+                          className="px-2.5 py-1 bg-purple-500/20 hover:bg-purple-500/30 text-purple-700 dark:text-purple-300 border border-purple-500/40 rounded-lg text-xs font-bold transition"
                         >
                           ✏️ Edit
                         </button>
                         <button
                           onClick={() => handleDeleteZone(zone.id)}
-                          className="px-2 py-1 bg-red-950/60 hover:bg-red-900 text-red-300 border border-red-800/80 rounded-lg text-xs font-bold transition"
+                          className="px-2 py-1 bg-red-50 hover:bg-red-100 dark:bg-red-950/60 dark:hover:bg-red-900 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800/80 rounded-lg text-xs font-bold transition"
                           title="Hapus Zona"
                         >
                           🗑️
@@ -1690,15 +1794,15 @@ export default function AdminDashboardPage() {
         {/* TAB 4: SAKLAR STOK CEPAT */}
         {activeTab === 'stock' && (
           <div className="space-y-6">
-            <div className="bg-slate-850 border border-slate-800 rounded-2xl p-4 shadow-xl flex items-center justify-between">
+            <div className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm dark:shadow-xl flex items-center justify-between transition-colors">
               <div>
-                <h2 className="text-sm font-bold text-white uppercase tracking-wider">
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
                   Saklar Stok Menu Cepat
                 </h2>
-                <p className="text-xs text-slate-400">Klik satu tombol untuk mengubah status menu habis / tersedia seketika</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Klik satu tombol untuk mengubah status menu habis / tersedia seketika</p>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-400">Habis: <strong className="text-red-400">{totalSoldOut}</strong></span>
+                <span className="text-xs text-slate-500 dark:text-slate-400">Habis: <strong className="text-red-600 dark:text-red-400">{totalSoldOut}</strong></span>
               </div>
             </div>
 
@@ -1710,22 +1814,22 @@ export default function AdminDashboardPage() {
                 return (
                   <div
                     key={item.id}
-                    className={`bg-slate-800/90 border rounded-2xl p-3 shadow flex flex-col justify-between transition ${
-                      isAvailable ? 'border-slate-700' : 'border-red-900 bg-red-950/20'
+                    className={`bg-white dark:bg-slate-800/90 border rounded-2xl p-3 shadow-sm flex flex-col justify-between transition ${
+                      isAvailable ? 'border-slate-200 dark:border-slate-700' : 'border-red-200 dark:border-red-900 bg-red-50/50 dark:bg-red-950/20'
                     }`}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-900 flex-shrink-0">
+                      <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-900 flex-shrink-0 border border-slate-200 dark:border-slate-800">
                         <img src={item.image} alt={item.name} className={`w-full h-full object-cover ${!isAvailable && 'grayscale'}`} />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <h4 className="text-xs font-bold text-white truncate">{item.name}</h4>
-                        <span className="text-[11px] text-slate-400">{toIdr(item.price)}</span>
+                        <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">{item.name}</h4>
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400">{toIdr(item.price)}</span>
                       </div>
                     </div>
 
-                    <div className="mt-3 pt-2.5 border-t border-slate-700/60 flex items-center justify-between">
-                      <span className={`text-[10px] font-black uppercase ${isAvailable ? 'text-emerald-400' : 'text-red-400'}`}>
+                    <div className="mt-3 pt-2.5 border-t border-slate-200 dark:border-slate-700/60 flex items-center justify-between">
+                      <span className={`text-[10px] font-black uppercase ${isAvailable ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                         {isAvailable ? '● Tersedia' : '✕ Habis'}
                       </span>
 
@@ -1752,22 +1856,22 @@ export default function AdminDashboardPage() {
         {activeTab === 'promo' && (
           <div className="space-y-6">
             {/* Header Promo Banner Card */}
-            <div className="bg-slate-850 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+            <div className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6 shadow-sm dark:shadow-xl space-y-4 transition-colors">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
                 <div>
-                  <h2 className="text-base font-black text-white flex items-center gap-2">
+                  <h2 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
                     <span>🎟️</span> Kelola Voucher Promo & Diskon Belanja
                   </h2>
-                  <p className="text-xs text-slate-400 mt-0.5">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                     Buat kode promo hemat, diskon persentase, atau potongan tetap untuk pelanggan dine-in maupun delivery.
                   </p>
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <span className="text-xs font-bold text-slate-300">
+                  <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
                     Kupon Aktif:
                   </span>
-                  <span className="px-3 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-bold">
+                  <span className="px-3 py-1 bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30 rounded-xl text-xs font-bold">
                     {promos.filter(p => p.isActive).length} dari {promos.length} Kupon
                   </span>
                   <button
@@ -1780,7 +1884,7 @@ export default function AdminDashboardPage() {
               </div>
 
               {/* Info Tips Pajak Resto */}
-              <div className="p-3 bg-emerald-950/30 border border-emerald-800/60 rounded-xl text-xs text-emerald-300 flex items-center gap-2">
+              <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 rounded-xl text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-2">
                 <span>💡</span>
                 <span>
                   <strong>Bebas Pajak (0% PB1):</strong> Perhitungan pajak resto 10% sudah dinonaktifkan sesuai kebutuhan wilayah. Promo diskon akan memotong subtotal secara transparan!
@@ -1795,19 +1899,19 @@ export default function AdminDashboardPage() {
                 return (
                   <div
                     key={promo.id}
-                    className={`bg-slate-800/90 border rounded-2xl p-4 shadow-lg flex flex-col justify-between transition relative overflow-hidden ${
-                      promo.isActive ? 'border-amber-500/40' : 'border-slate-700 opacity-60'
+                    className={`bg-white dark:bg-slate-800/90 border rounded-2xl p-4 shadow-sm dark:shadow-lg flex flex-col justify-between transition relative overflow-hidden ${
+                      promo.isActive ? 'border-amber-400/50 dark:border-amber-500/40' : 'border-slate-200 dark:border-slate-700 opacity-60'
                     }`}
                   >
                     {/* Top Ribbon / Badge */}
                     <div>
                       <div className="flex items-start justify-between gap-2 mb-2">
                         <div className="flex items-center gap-2">
-                          <span className="px-2.5 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono font-black text-sm rounded-lg tracking-wider">
+                          <span className="px-2.5 py-1 bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30 font-mono font-black text-sm rounded-lg tracking-wider">
                             {promo.code}
                           </span>
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase ${
-                            isPercent ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                            isPercent ? 'bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-500/30' : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30'
                           }`}>
                             {isPercent ? 'Diskon %' : 'Potongan Rp'}
                           </span>
@@ -1817,51 +1921,51 @@ export default function AdminDashboardPage() {
                           className={`text-[10px] font-black px-2 py-1 rounded-lg transition ${
                             promo.isActive
                               ? 'bg-emerald-600 text-white'
-                              : 'bg-slate-700 text-slate-300'
+                              : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
                           }`}
                         >
                           {promo.isActive ? '✓ Aktif' : 'Non-Aktif'}
                         </button>
                       </div>
 
-                      <h4 className="font-bold text-sm text-white mb-1">{promo.title}</h4>
-                      <p className="text-xs text-slate-300 leading-relaxed mb-3">{promo.description}</p>
+                      <h4 className="font-bold text-sm text-slate-900 dark:text-white mb-1">{promo.title}</h4>
+                      <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed mb-3">{promo.description}</p>
 
                       {/* Detail Nilai Potongan & Syarat */}
-                      <div className="bg-slate-850 p-2.5 rounded-xl border border-slate-750 space-y-1 text-xs">
-                        <div className="flex justify-between text-slate-300">
+                      <div className="bg-slate-50 dark:bg-slate-850 p-2.5 rounded-xl border border-slate-200 dark:border-slate-750 space-y-1 text-xs">
+                        <div className="flex justify-between text-slate-600 dark:text-slate-300">
                           <span>Nilai Diskon:</span>
-                          <span className="font-bold text-amber-400">
+                          <span className="font-bold text-amber-600 dark:text-amber-400">
                             {isPercent ? `${promo.value}%` : toIdr(promo.value)}
                           </span>
                         </div>
                         {promo.minOrder ? (
-                          <div className="flex justify-between text-slate-400 text-[11px]">
+                          <div className="flex justify-between text-slate-500 dark:text-slate-400 text-[11px]">
                             <span>Min. Belanja:</span>
-                            <span className="font-medium text-slate-200">{toIdr(promo.minOrder)}</span>
+                            <span className="font-medium text-slate-700 dark:text-slate-200">{toIdr(promo.minOrder)}</span>
                           </div>
                         ) : null}
                         {isPercent && promo.maxDiscount ? (
-                          <div className="flex justify-between text-slate-400 text-[11px]">
+                          <div className="flex justify-between text-slate-500 dark:text-slate-400 text-[11px]">
                             <span>Maks. Potongan:</span>
-                            <span className="font-medium text-slate-200">{toIdr(promo.maxDiscount)}</span>
+                            <span className="font-medium text-slate-700 dark:text-slate-200">{toIdr(promo.maxDiscount)}</span>
                           </div>
                         ) : null}
                       </div>
                     </div>
 
                     {/* Bottom Actions */}
-                    <div className="mt-4 pt-3 border-t border-slate-750 flex items-center justify-between">
+                    <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-750 flex items-center justify-between">
                       <button
                         onClick={() => handleDeletePromo(promo.id)}
-                        className="text-xs text-rose-400 hover:text-rose-300 font-bold transition flex items-center gap-1"
+                        className="text-xs text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 font-bold transition flex items-center gap-1"
                       >
                         🗑️ Hapus
                       </button>
 
                       <button
                         onClick={() => handleOpenPromoModal(promo)}
-                        className="px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg text-xs font-bold transition flex items-center gap-1"
+                        className="px-3 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 rounded-lg text-xs font-bold transition flex items-center gap-1"
                       >
                         ✏️ Edit Promo
                       </button>
@@ -1877,32 +1981,32 @@ export default function AdminDashboardPage() {
       {/* MODAL TAMBAH MENU BARU */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-slate-850 border border-slate-700 text-white rounded-2xl max-w-md w-full p-6 shadow-2xl relative my-8">
-            <h2 className="text-lg font-black text-white flex items-center gap-2 mb-1">
+          <div className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-2xl max-w-md w-full p-6 shadow-2xl relative my-8 transition-colors">
+            <h2 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2 mb-1">
               <span>➕</span> Tambah Menu Baru ke Katalog
             </h2>
-            <p className="text-xs text-slate-400 mb-4">Menu baru otomatis langsung muncul di layar pemesanan meja tamu.</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">Menu baru otomatis langsung muncul di layar pemesanan meja tamu.</p>
 
             <form onSubmit={handleCreateMenu} className="space-y-3.5">
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Nama Menu *</label>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Nama Menu *</label>
                 <input
                   type="text"
                   required
                   placeholder="Contoh: Ayam Bakar Madu Spesial"
                   value={formName}
                   onChange={e => setFormName(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500"
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-red-500"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">Kategori *</label>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Kategori *</label>
                   <select
                     value={formCategory}
                     onChange={e => setFormCategory(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500"
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-red-500"
                   >
                     {CATEGORIES.filter(c => c !== 'Semua').map(cat => (
                       <option key={cat} value={cat}>{cat}</option>
@@ -1911,38 +2015,38 @@ export default function AdminDashboardPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">Harga (Rp) *</label>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Harga (Rp) *</label>
                   <input
                     type="number"
                     required
                     placeholder="Contoh: 18000"
                     value={formPrice}
                     onChange={e => setFormPrice(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500 font-mono"
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-red-500 font-mono"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Deskripsi Menu</label>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Deskripsi Menu</label>
                 <textarea
                   rows={2}
                   placeholder="Keterangan bumbu, rasa, atau porsi..."
                   value={formDescription}
                   onChange={e => setFormDescription(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500"
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-red-500"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Foto Menu</label>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Foto Menu</label>
                 <div className="flex gap-2 items-center">
                   <input
                     type="text"
                     placeholder="URL gambar atau upload..."
                     value={formImage}
                     onChange={e => setFormImage(e.target.value)}
-                    className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500"
+                    className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-red-500"
                   />
                   <input
                     type="file"
@@ -1955,17 +2059,17 @@ export default function AdminDashboardPage() {
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isUploading}
-                    className="bg-slate-750 hover:bg-slate-700 border border-slate-650 px-3 py-2 rounded-xl text-xs font-bold text-slate-200"
+                    className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-750 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-650 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200"
                   >
                     {isUploading ? 'Uploading...' : '📁 Upload'}
                   </button>
                 </div>
                 {formImage && (
                   <div className="mt-2 flex items-center gap-2">
-                    <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-slate-700">
+                    <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
                       <img src={formImage} alt="Preview" className="w-full h-full object-cover" />
                     </div>
-                    <span className="text-[11px] text-emerald-400 font-medium">✓ Foto terpasang</span>
+                    <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">✓ Foto terpasang</span>
                   </div>
                 )}
               </div>
@@ -1976,14 +2080,14 @@ export default function AdminDashboardPage() {
                   id="addPopular"
                   checked={formIsPopular}
                   onChange={e => setFormIsPopular(e.target.checked)}
-                  className="w-4 h-4 rounded text-red-600 focus:ring-red-500 bg-slate-800 border-slate-700"
+                  className="w-4 h-4 rounded text-red-600 focus:ring-red-500 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700"
                 />
-                <label htmlFor="addPopular" className="text-xs text-slate-300 font-medium">
+                <label htmlFor="addPopular" className="text-xs text-slate-700 dark:text-slate-300 font-medium cursor-pointer">
                   Tandai sebagai Menu Favorit (🔥 Ada lencana Favorit)
                 </label>
               </div>
 
-              <div className="flex gap-2 pt-4 border-t border-slate-750">
+              <div className="flex gap-2 pt-4 border-t border-slate-200 dark:border-slate-750">
                 <button
                   type="submit"
                   className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs shadow transition"
@@ -1993,7 +2097,7 @@ export default function AdminDashboardPage() {
                 <button
                   type="button"
                   onClick={() => setIsAddModalOpen(false)}
-                  className="px-4 bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold py-2.5 rounded-xl text-xs transition"
+                  className="px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-300 font-bold py-2.5 rounded-xl text-xs transition"
                 >
                   Batal
                 </button>
@@ -2006,31 +2110,31 @@ export default function AdminDashboardPage() {
       {/* MODAL EDIT MENU & HARGA */}
       {isEditModalOpen && editingItem && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-slate-850 border border-slate-700 text-white rounded-2xl max-w-md w-full p-6 shadow-2xl relative my-8">
-            <h2 className="text-lg font-black text-white flex items-center gap-2 mb-1">
+          <div className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-2xl max-w-md w-full p-6 shadow-2xl relative my-8 transition-colors">
+            <h2 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2 mb-1">
               <span>✏️</span> Edit Menu & Harga
             </h2>
-            <p className="text-xs text-slate-400 mb-4">Perubahan harga dan nama menu akan langsung tersinkron ke semua meja.</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">Perubahan harga dan nama menu akan langsung tersinkron ke semua meja.</p>
 
             <form onSubmit={handleUpdateMenu} className="space-y-3.5">
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Nama Menu *</label>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Nama Menu *</label>
                 <input
                   type="text"
                   required
                   value={editingItem.name}
                   onChange={e => setEditingItem({ ...editingItem, name: e.target.value })}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500"
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-red-500"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">Kategori *</label>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Kategori *</label>
                   <select
                     value={editingItem.category}
                     onChange={e => setEditingItem({ ...editingItem, category: e.target.value })}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500"
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-red-500"
                   >
                     {CATEGORIES.filter(c => c !== 'Semua').map(cat => (
                       <option key={cat} value={cat}>{cat}</option>
@@ -2039,35 +2143,35 @@ export default function AdminDashboardPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">Harga Satuan (Rp) *</label>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Harga Satuan (Rp) *</label>
                   <input
                     type="number"
                     required
                     value={editingItem.price}
                     onChange={e => setEditingItem({ ...editingItem, price: Number(e.target.value) })}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500 font-mono"
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-red-500 font-mono"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Deskripsi</label>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Deskripsi</label>
                 <textarea
                   rows={2}
                   value={editingItem.description}
                   onChange={e => setEditingItem({ ...editingItem, description: e.target.value })}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500"
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-red-500"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Ubah Foto Menu</label>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Ubah Foto Menu</label>
                 <div className="flex gap-2 items-center">
                   <input
                     type="text"
                     value={editingItem.image}
                     onChange={e => setEditingItem({ ...editingItem, image: e.target.value })}
-                    className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500"
+                    className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-red-500"
                   />
                   <input
                     type="file"
@@ -2080,17 +2184,17 @@ export default function AdminDashboardPage() {
                     type="button"
                     onClick={() => editFileInputRef.current?.click()}
                     disabled={isUploading}
-                    className="bg-slate-750 hover:bg-slate-700 border border-slate-650 px-3 py-2 rounded-xl text-xs font-bold text-slate-200"
+                    className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-750 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-650 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200"
                   >
                     {isUploading ? 'Uploading...' : '📁 Upload'}
                   </button>
                 </div>
                 {editingItem.image && (
                   <div className="mt-2 flex items-center gap-2">
-                    <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-slate-700">
+                    <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
                       <img src={editingItem.image} alt="Preview" className="w-full h-full object-cover" />
                     </div>
-                    <span className="text-[11px] text-emerald-400 font-medium">✓ Foto terpasang</span>
+                    <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">✓ Foto terpasang</span>
                   </div>
                 )}
               </div>
@@ -2101,14 +2205,14 @@ export default function AdminDashboardPage() {
                   id="editPopular"
                   checked={editingItem.isPopular || false}
                   onChange={e => setEditingItem({ ...editingItem, isPopular: e.target.checked })}
-                  className="w-4 h-4 rounded text-red-600 focus:ring-red-500 bg-slate-800 border-slate-700"
+                  className="w-4 h-4 rounded text-red-600 focus:ring-red-500 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700"
                 />
-                <label htmlFor="editPopular" className="text-xs text-slate-300 font-medium">
+                <label htmlFor="editPopular" className="text-xs text-slate-700 dark:text-slate-300 font-medium cursor-pointer">
                   Tandai sebagai Menu Favorit (🔥 Ada lencana Favorit)
                 </label>
               </div>
 
-              <div className="flex gap-2 pt-4 border-t border-slate-750">
+              <div className="flex gap-2 pt-4 border-t border-slate-200 dark:border-slate-750">
                 <button
                   type="submit"
                   className="flex-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-2.5 rounded-xl text-xs shadow transition"
@@ -2118,7 +2222,7 @@ export default function AdminDashboardPage() {
                 <button
                   type="button"
                   onClick={() => setIsEditModalOpen(false)}
-                  className="px-4 bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold py-2.5 rounded-xl text-xs transition"
+                  className="px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-300 font-bold py-2.5 rounded-xl text-xs transition"
                 >
                   Batal
                 </button>
@@ -2131,60 +2235,60 @@ export default function AdminDashboardPage() {
       {/* MODAL TAMBAH / EDIT ZONA ONGKIR */}
       {isZoneModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-slate-850 border border-slate-700 text-white rounded-2xl max-w-md w-full p-6 shadow-2xl relative my-8">
-            <h2 className="text-lg font-black text-white flex items-center gap-2 mb-1">
+          <div className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-2xl max-w-md w-full p-6 shadow-2xl relative my-8 transition-colors">
+            <h2 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2 mb-1">
               <span>🛵</span> {editingZone ? 'Edit Zona Pengantaran' : 'Tambah Zona Pengantaran Baru'}
             </h2>
-            <p className="text-xs text-slate-400 mb-4">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
               Atur nama wilayah, deskripsi cakupan, tarif ongkir, dan estimasi waktu kurir.
             </p>
 
             <form onSubmit={handleSaveZone} className="space-y-3.5">
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Nama Zona / Area *</label>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Nama Zona / Area *</label>
                 <input
                   type="text"
                   required
                   placeholder="Contoh: Zona 1 - Radius Dekat (< 2 km)"
                   value={zoneName}
                   onChange={e => setZoneName(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-purple-500"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">Tarif Ongkir (Rp) *</label>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Tarif Ongkir (Rp) *</label>
                   <input
                     type="number"
                     required
                     placeholder="Contoh: 5000"
                     value={zoneFee}
                     onChange={e => setZoneFee(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500 font-mono"
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-purple-500 font-mono"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">Estimasi Waktu</label>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Estimasi Waktu</label>
                   <input
                     type="text"
                     placeholder="Contoh: 15 - 25 Menit"
                     value={zoneTime}
                     onChange={e => setZoneTime(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-purple-500"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Deskripsi Cakupan Area</label>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Deskripsi Cakupan Area</label>
                 <textarea
                   rows={2}
                   placeholder="Contoh: Sekitar perumahan griya asri, balai desa, dan kantor dinas..."
                   value={zoneDesc}
                   onChange={e => setZoneDesc(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-purple-500"
                 />
               </div>
 
@@ -2194,14 +2298,14 @@ export default function AdminDashboardPage() {
                   id="zoneActiveToggle"
                   checked={zoneActive}
                   onChange={e => setZoneActive(e.target.checked)}
-                  className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 bg-slate-800 border-slate-700"
+                  className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700"
                 />
-                <label htmlFor="zoneActiveToggle" className="text-xs text-slate-300 font-medium">
+                <label htmlFor="zoneActiveToggle" className="text-xs text-slate-700 dark:text-slate-300 font-medium cursor-pointer">
                   Zona Aktif (Dapat dipilih pelanggan saat checkout)
                 </label>
               </div>
 
-              <div className="flex gap-2 pt-4 border-t border-slate-750">
+              <div className="flex gap-2 pt-4 border-t border-slate-200 dark:border-slate-750">
                 <button
                   type="submit"
                   className="flex-1 bg-purple-600 hover:bg-purple-500 text-white font-bold py-2.5 rounded-xl text-xs shadow transition"
@@ -2211,7 +2315,7 @@ export default function AdminDashboardPage() {
                 <button
                   type="button"
                   onClick={() => setIsZoneModalOpen(false)}
-                  className="px-4 bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold py-2.5 rounded-xl text-xs transition"
+                  className="px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-300 font-bold py-2.5 rounded-xl text-xs transition"
                 >
                   Batal
                 </button>
@@ -2306,37 +2410,37 @@ export default function AdminDashboardPage() {
       {/* MODAL RESET PESANAN ADMIN (MULAI DARI 0) */}
       {isResetModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-850 border border-slate-700 text-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-700/80 pb-3">
-              <div className="flex items-center gap-2 text-rose-400">
+          <div className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative space-y-4 transition-colors">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700/80 pb-3">
+              <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
                 <span className="text-xl">⚠️</span>
                 <h3 className="text-base font-black">Reset Sesi / Mulai dari Nol</h3>
               </div>
               <button
                 onClick={() => setIsResetModalOpen(false)}
-                className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white"
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition"
               >
                 ✕
               </button>
             </div>
 
-            <div className="space-y-2 text-xs text-slate-300 leading-relaxed">
+            <div className="space-y-2 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
               <p>
                 Aksi ini akan <strong>mengosongkan seluruh antrean transaksi</strong>. Penomoran pesanan baru berikutnya akan otomatis <strong>kembali mulai dari ORD-001</strong>.
               </p>
-              <div className="bg-slate-900 border border-slate-800 p-3 rounded-xl space-y-1">
-                <p className="text-slate-400">Transaksi Terdaftar: <strong className="text-white">{report?.recentOrders?.length || 0} Order</strong></p>
-                <p className="text-emerald-400 font-semibold">
+              <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-xl space-y-1">
+                <p className="text-slate-500 dark:text-slate-400">Transaksi Terdaftar: <strong className="text-slate-900 dark:text-white">{report?.recentOrders?.length || 0} Order</strong></p>
+                <p className="text-emerald-600 dark:text-emerald-400 font-semibold">
                   ✓ File cadangan JSON akan diunduh otomatis sebelum database dibersihkan.
                 </p>
               </div>
             </div>
 
-            <div className="space-y-2 pt-2 border-t border-slate-750">
+            <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-750">
               <button
                 type="button"
                 onClick={handleDownloadBackup}
-                className="w-full py-2.5 bg-slate-800 hover:bg-slate-750 border border-slate-700 text-slate-200 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2"
+                className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2"
               >
                 <span>💾</span> Unduh Cadangan JSON Sekarang
               </button>
@@ -2360,31 +2464,36 @@ export default function AdminDashboardPage() {
         onClose={() => setPrintingOrder(null)}
       />
 
-      {/* MODAL PENGATURAN STATUS TOKO & JAM OPERASIONAL */}
+      {/* MODAL PENGATURAN STATUS TOKO, LOKASI & KONTAK WHATSAPP */}
       {isStoreModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-slate-850 border border-slate-700 text-white rounded-2xl max-w-md w-full p-6 shadow-2xl relative my-8">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-750 mb-4">
-              <div className="flex items-center gap-2">
-                <Store className="w-5 h-5 text-amber-400" />
-                <h3 className="text-base font-bold text-white">Status Resto & Jam Operasional</h3>
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-3xl max-w-lg w-full p-5 sm:p-7 shadow-2xl relative my-8 transition-colors">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-750 mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center">
+                  <Store className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 dark:text-white">Pengaturan Toko & Lokasi Resto</h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Jam buka, titik koordinat GPS fisik resto & kontak WA</p>
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => setIsStoreModalOpen(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg text-sm"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-white p-1 rounded-lg text-sm"
               >
                 ✕
               </button>
             </div>
 
             <form onSubmit={handleSaveStoreConfig} className="space-y-4 text-xs">
-              {/* Saklar Buka / Tutup Manual Cepat */}
-              <div className="p-3.5 rounded-xl bg-slate-800 border border-slate-700 space-y-2">
+              {/* Bagian 1: Saklar Buka / Tutup Cepat */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-2">
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="font-bold text-white text-sm block">Status Buka Resto Saat Ini</label>
-                    <p className="text-[11px] text-slate-400">Tentukan apakah pelanggan dapat membuat pesanan</p>
+                    <label className="font-bold text-slate-900 dark:text-white text-xs block">Status Buka Resto Saat Ini</label>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Kontrol langsung apakah pelanggan bisa memesan</p>
                   </div>
                   <button
                     type="button"
@@ -2401,38 +2510,147 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
 
-              {/* Opsi Jadwal Otomatis */}
-              <div className="p-3.5 rounded-xl bg-slate-800 border border-slate-700 space-y-3">
+              {/* Bagian 2: Lokasi Fisik & Titik GPS Toko (Solusi Ongkir & Jarak Kejauhan) */}
+              <div className="p-3.5 rounded-2xl bg-purple-50/70 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800/50 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-purple-900 dark:text-purple-300 font-bold">
+                    <MapPin className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                    <span>Titik Lokasi Resto HR Food (Pusat Pengantaran)</span>
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-600 dark:text-purple-200/80 leading-relaxed">
+                  Titik koordinat ini digunakan sebagai <strong>titik nol/pangkal</strong> untuk menghitung jarak kilometer delivery ke rumah pembeli secara akurat.
+                </p>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Alamat Lengkap Fisik Toko *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formStoreAddress}
+                    onChange={e => setFormStoreAddress(e.target.value)}
+                    placeholder="Contoh: Jl. Babakan No. 12, Krajan, Resto HR Food"
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                {/* Tombol Ambil GPS Saya Saat Ini */}
+                <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleDetectStoreGps}
+                    disabled={isDetectingStoreGps}
+                    className="flex-1 py-2 px-3 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm active:scale-95 disabled:opacity-50"
+                  >
+                    <Navigation className="w-3.5 h-3.5" />
+                    <span>{isDetectingStoreGps ? 'Mendeteksi GPS...' : '📍 Gunakan Lokasi GPS Saya Saat Ini'}</span>
+                  </button>
+
+                  <a
+                    href={`https://www.google.com/maps?q=${formStoreLatitude},${formStoreLongitude}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="py-2 px-3 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-700 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5"
+                    title="Buka titik ini di Google Maps"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Cek di Google Maps</span>
+                  </a>
+                </div>
+
+                {storeGpsStatus && (
+                  <p className="text-[11px] text-purple-800 dark:text-purple-300 font-semibold bg-purple-100/60 dark:bg-purple-900/40 p-2 rounded-lg">
+                    {storeGpsStatus}
+                  </p>
+                )}
+
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                      Latitude
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      required
+                      value={formStoreLatitude}
+                      onChange={e => setFormStoreLatitude(e.target.value)}
+                      placeholder="-6.9175"
+                      className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-purple-500 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                      Longitude
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      required
+                      value={formStoreLongitude}
+                      onChange={e => setFormStoreLongitude(e.target.value)}
+                      placeholder="107.6191"
+                      className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-purple-500 font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Bagian 3: Nomor WhatsApp Resmi Resto / Owner */}
+              <div className="p-3.5 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/50 space-y-2">
+                <div className="flex items-center gap-1.5 text-emerald-900 dark:text-emerald-300 font-bold">
+                  <Phone className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <span>Nomor WhatsApp Resmi Resto / Owner</span>
+                </div>
+                <div>
+                  <input
+                    type="text"
+                    required
+                    value={formStorePhone}
+                    onChange={e => setFormStorePhone(e.target.value)}
+                    placeholder="Contoh: 0838-3843-2860 atau 6283838432860"
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 font-mono"
+                  />
+                  <p className="text-[10px] text-slate-500 dark:text-emerald-300/80 mt-1">
+                    Nomor ini menjadi tujuan seluruh tombol chat WhatsApp pesanan, bantuan kasir, dan pemesanan online.
+                  </p>
+                </div>
+              </div>
+
+              {/* Bagian 4: Auto Buka / Tutup Jadwal */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="font-bold text-white block">Auto Buka/Tutup Terjadwal</label>
-                    <p className="text-[11px] text-slate-400">Otomatis tentukan status buka berdasarkan jam WIB</p>
+                    <label className="font-bold text-slate-900 dark:text-white block">Auto Buka/Tutup Terjadwal (Jam Operasional)</label>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Otomatis tentukan status buka berdasarkan jam WIB</p>
                   </div>
                   <input
                     type="checkbox"
                     checked={formAutoSchedule}
                     onChange={e => setFormAutoSchedule(e.target.checked)}
-                    className="w-4 h-4 rounded text-red-600 bg-slate-700 border-slate-600 focus:ring-red-500"
+                    className="w-4 h-4 rounded text-red-600 bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 focus:ring-red-500"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 pt-1">
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">Jam Buka (WIB)</label>
+                    <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">Jam Buka (WIB)</label>
                     <input
                       type="time"
                       value={formOpenTime}
                       onChange={e => setFormOpenTime(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500 font-mono"
+                      className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500 font-mono"
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">Jam Tutup (WIB)</label>
+                    <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">Jam Tutup (WIB)</label>
                     <input
                       type="time"
                       value={formCloseTime}
                       onChange={e => setFormCloseTime(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500 font-mono"
+                      className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500 font-mono"
                     />
                   </div>
                 </div>
@@ -2440,13 +2658,13 @@ export default function AdminDashboardPage() {
 
               {/* Pesan saat Resto Tutup */}
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Pesan Pengumuman saat Tutup</label>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Pesan Pengumuman saat Tutup</label>
                 <textarea
                   rows={2}
                   value={formClosedMessage}
                   onChange={e => setFormClosedMessage(e.target.value)}
                   placeholder="Maaf, resto kami sedang tutup..."
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
                 />
               </div>
 
@@ -2454,14 +2672,14 @@ export default function AdminDashboardPage() {
                 <button
                   type="submit"
                   disabled={isSavingStore}
-                  className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white font-bold py-2.5 rounded-xl text-xs shadow transition"
+                  className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white font-bold py-2.5 rounded-xl text-xs shadow transition active:scale-95"
                 >
-                  {isSavingStore ? 'Menyimpan...' : 'Simpan Pengaturan Resto'}
+                  {isSavingStore ? 'Menyimpan...' : '💾 Simpan Pengaturan Toko & Lokasi'}
                 </button>
                 <button
                   type="button"
                   onClick={() => setIsStoreModalOpen(false)}
-                  className="px-4 bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold py-2.5 rounded-xl text-xs transition"
+                  className="px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-300 font-bold py-2.5 rounded-xl text-xs transition"
                 >
                   Batal
                 </button>
@@ -2474,46 +2692,46 @@ export default function AdminDashboardPage() {
       {/* MODAL TAMBAH / EDIT KUPON PROMO */}
       {isPromoModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-slate-850 border border-slate-700 text-white rounded-2xl max-w-md w-full p-6 shadow-2xl relative my-8">
-            <h2 className="text-lg font-black text-white flex items-center gap-2 mb-1">
+          <div className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-2xl max-w-md w-full p-6 shadow-2xl relative my-8 transition-colors">
+            <h2 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2 mb-1">
               <span>🎟️</span> {editingPromo ? 'Edit Kupon Promo' : 'Tambah Kupon Promo Baru'}
             </h2>
-            <p className="text-xs text-slate-400 mb-4">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
               {editingPromo ? 'Perbarui informasi dan ketentuan kupon promo.' : 'Kupon baru langsung dapat digunakan oleh pelanggan saat checkout.'}
             </p>
 
             <form onSubmit={handleSavePromo} className="space-y-3.5">
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Kode Promo / Kupon *</label>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Kode Promo / Kupon *</label>
                 <input
                   type="text"
                   required
                   placeholder="Contoh: DISKONJUMAT"
                   value={promoCode}
                   onChange={e => setPromoCode(e.target.value.toUpperCase())}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 font-mono uppercase tracking-wider font-bold"
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500 font-mono uppercase tracking-wider font-bold"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Judul / Nama Promo *</label>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Judul / Nama Promo *</label>
                 <input
                   type="text"
                   required
                   placeholder="Contoh: Diskon Jumat Berkah 15%"
                   value={promoTitle}
                   onChange={e => setPromoTitle(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">Tipe Potongan *</label>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Tipe Potongan *</label>
                   <select
                     value={promoType}
                     onChange={e => setPromoType(e.target.value as 'fixed' | 'percent')}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 font-medium"
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500 font-medium"
                   >
                     <option value="fixed">Nominal Tetap (Rp)</option>
                     <option value="percent">Persentase (%)</option>
@@ -2521,7 +2739,7 @@ export default function AdminDashboardPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                     {promoType === 'percent' ? 'Besar Diskon (%) *' : 'Nominal Potongan (Rp) *'}
                   </label>
                   <input
@@ -2532,27 +2750,27 @@ export default function AdminDashboardPage() {
                     placeholder={promoType === 'percent' ? 'Contoh: 10' : 'Contoh: 5000'}
                     value={promoValue}
                     onChange={e => setPromoValue(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 font-mono"
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500 font-mono"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">Min. Belanja (Rp)</label>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Min. Belanja (Rp)</label>
                   <input
                     type="number"
                     min={0}
                     placeholder="Contoh: 25000"
                     value={promoMinOrder}
                     onChange={e => setPromoMinOrder(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 font-mono"
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500 font-mono"
                   />
-                  <span className="text-[10px] text-slate-400 mt-0.5 block">0 jika tanpa minimal</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 block">0 jika tanpa minimal</span>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">Maks. Potongan (Rp)</label>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Maks. Potongan (Rp)</label>
                   <input
                     type="number"
                     min={0}
@@ -2560,22 +2778,22 @@ export default function AdminDashboardPage() {
                     placeholder={promoType === 'percent' ? 'Contoh: 10000' : 'Hanya untuk %'}
                     value={promoMaxDiscount}
                     onChange={e => setPromoMaxDiscount(e.target.value)}
-                    className={`w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 font-mono ${
+                    className={`w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500 font-mono ${
                       promoType !== 'percent' ? 'opacity-50 cursor-not-allowed' : ''
                     }`}
                   />
-                  <span className="text-[10px] text-slate-400 mt-0.5 block">Khusus tipe persentase</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 block">Khusus tipe persentase</span>
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Deskripsi & Syarat Ketentuan</label>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Deskripsi & Syarat Ketentuan</label>
                 <textarea
                   rows={2}
                   placeholder="Contoh: Diskon 10% maksimal potongan Rp 8.000 dengan minimal order Rp 35.000"
                   value={promoDesc}
                   onChange={e => setPromoDesc(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
                 />
               </div>
 
@@ -2585,9 +2803,9 @@ export default function AdminDashboardPage() {
                   id="promoActiveCheck"
                   checked={promoActive}
                   onChange={e => setPromoActive(e.target.checked)}
-                  className="w-4 h-4 rounded text-amber-600 bg-slate-750 border-slate-600 focus:ring-amber-500"
+                  className="w-4 h-4 rounded text-amber-600 bg-white dark:bg-slate-750 border-slate-300 dark:border-slate-600 focus:ring-amber-500"
                 />
-                <label htmlFor="promoActiveCheck" className="text-xs text-slate-300 font-bold cursor-pointer">
+                <label htmlFor="promoActiveCheck" className="text-xs text-slate-700 dark:text-slate-300 font-bold cursor-pointer">
                   Kupon Promo Langsung Aktif
                 </label>
               </div>
@@ -2603,7 +2821,7 @@ export default function AdminDashboardPage() {
                 <button
                   type="button"
                   onClick={() => setIsPromoModalOpen(false)}
-                  className="px-4 bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold py-2.5 rounded-xl text-xs transition"
+                  className="px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-300 font-bold py-2.5 rounded-xl text-xs transition"
                 >
                   Batal
                 </button>

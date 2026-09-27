@@ -17,6 +17,10 @@ const DEFAULT_STORE_CONFIG: StoreConfig = {
   openTime: '10:00',
   closeTime: '22:00',
   closedMessage: 'Maaf, saat ini HR FOOD sedang tutup. Jam operasional kami pukul 10:00 - 22:00 WIB. Pemesanan akan dibuka kembali saat resto beroperasi.',
+  storeAddress: 'Jl. Babakan No. 12, Resto HR Food',
+  storeLatitude: -6.9175,
+  storeLongitude: 107.6191,
+  storePhone: '0838-3843-2860',
 };
 
 function ensureDataDir() {

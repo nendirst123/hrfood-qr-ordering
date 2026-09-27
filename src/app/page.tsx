@@ -123,7 +123,11 @@ function OrderingAppContent() {
           latitude: pos.coords.latitude,
           longitude: pos.coords.longitude,
         };
-        const km = calculateHaversineDistanceKm(userCoords, RESTO_COORDINATES);
+        const restoCoords = {
+          latitude: storeConfig?.storeLatitude ?? RESTO_COORDINATES.latitude,
+          longitude: storeConfig?.storeLongitude ?? RESTO_COORDINATES.longitude,
+        };
+        const km = calculateHaversineDistanceKm(userCoords, restoCoords);
         setDeliveryDistanceKm(km);
         setSelectedVillagePresetId('custom-gps');
         setIsDetectingGps(false);
@@ -148,7 +152,7 @@ function OrderingAppContent() {
     setSelectedVillagePresetId(presetId);
     const preset = LOCAL_VILLAGE_PRESETS.find((p) => p.id === presetId);
     if (preset) {
-      const km = calculateHaversineDistanceKm(preset.coords, RESTO_COORDINATES);
+      const km = preset.nominalKm || 1.8;
       setDeliveryDistanceKm(km);
       setLocationStatusMsg({
         text: `📍 Terpilih: ${preset.name} (~${km} km dari resto)`,
@@ -357,6 +361,13 @@ function OrderingAppContent() {
 
   const cartTotal = Math.max(0, cartSubtotal - discountAmount + currentDeliveryFee);
   const totalItemCount = cart.reduce((acc, item) => acc + item.quantity, 0);
+
+  // Nomor WhatsApp aktif resto ternormalisasi
+  const activeWhatsApp = useMemo(() => {
+    const raw = storeConfig?.storePhone || deliverySettings?.whatsappNumber || '6283838432860';
+    const digits = raw.replace(/\D/g, '');
+    return digits.startsWith('0') ? '62' + digits.slice(1) : digits;
+  }, [storeConfig?.storePhone, deliverySettings?.whatsappNumber]);
 
   // Handler Terapkan Kupon Promo
   const handleApplyPromoCode = (promoToApply?: PromoCode) => {
@@ -1477,7 +1488,7 @@ function OrderingAppContent() {
 
               {/* Tombol Cadangan WA ke Admin/Kasir */}
               <a
-                href={`https://wa.me/${deliverySettings?.whatsappNumber || '6283838432860'}?text=${encodeURIComponent(
+                href={`https://wa.me/${activeWhatsApp}?text=${encodeURIComponent(
                   `Halo HR Food, saya ingin pesan:\n` +
                   `Mode: ${orderType === 'delivery' ? '🛵 PESAN ANTAR (DELIVERY)' : orderType === 'takeaway' ? '🛍️ BAWA PULANG' : `🍽️ MEJA ${tableNumber}`}\n` +
                   `Pemesan: ${customerName || 'Pelanggan'}\n` +
@@ -1553,7 +1564,7 @@ function OrderingAppContent() {
 
       {/* Floating WhatsApp Quick Chat */}
       <a
-        href={`https://wa.me/${deliverySettings?.whatsappNumber || '6283838432860'}?text=${encodeURIComponent(
+        href={`https://wa.me/${activeWhatsApp}?text=${encodeURIComponent(
           'Halo HR Food, saya ingin menanyakan informasi pemesanan / menu hari ini.'
         )}`}
         target="_blank"

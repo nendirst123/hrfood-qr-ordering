@@ -15,7 +15,7 @@ const DEFAULT_SETTINGS: DeliverySettings = {
   isEnabled: true,
   minOrderAmount: 15000,
   freeDeliveryThreshold: 150000,
-  whatsappNumber: '6281234567890',
+  whatsappNumber: '6283838432860',
   zones: [
     {
       id: 'zone-1',
