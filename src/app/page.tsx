@@ -631,7 +631,7 @@ function OrderingAppContent() {
         </div>
       )}
 
-      {/* Banner Promo Hero - Menu Spesial */}
+      {/* Banner Promo Hero - Menu Baru */}
       <div className="p-4 space-y-3">
         <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-amber-600 via-rose-700 to-red-800 p-4 text-white shadow-lg border border-amber-500/30">
           <div className="absolute -top-12 -right-12 w-40 h-40 bg-amber-400/20 rounded-full blur-2xl pointer-events-none" />
@@ -639,23 +639,23 @@ function OrderingAppContent() {
           <div className="relative z-10 flex items-center justify-between gap-3">
             <div className="flex-1 min-w-0">
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black tracking-wide uppercase mb-1.5 shadow-sm">
-                <Sparkles className="w-3 h-3 text-red-600 fill-red-600" /> MENU SPESIAL
+                <Sparkles className="w-3 h-3 text-red-600 fill-red-600" /> MENU BARU
               </span>
               <h2 className="text-base sm:text-lg font-black leading-tight text-white drop-shadow-sm">
-                Telur Dadar Krispi Barendo
+                Telur Dadar Krispi
               </h2>
-              <p className="text-[11px] text-rose-100 line-clamp-2 mt-1 leading-snug">
-                Telur dadar berenda keriting renyah khas Minang/Sunda, gurih dengan daun bawang &amp; pilihan sambal pedas favoritmu.
+              <p className="text-[11px] text-rose-100 line-clamp-3 mt-1 leading-snug">
+                Perpaduan telur dadar renyah gurih dengan taburan bawang kremes, sambal khas HR FOOD, lalapan segar, dan nasi hangat. Sederhana tapi selalu bikin nagih!
               </p>
               
               <div className="mt-3 flex items-center gap-2">
                 <div className="text-xs font-black text-amber-300 bg-black/40 px-2.5 py-1 rounded-lg border border-amber-400/40">
-                  Cuma Rp 4.000
+                  Cuma Rp 12.000
                 </div>
                 <button
                   onClick={() => {
-                    const barendoItem = MENU_ITEMS.find((m) => m.id === 'hr-sayur-10') || MENU_ITEMS[0];
-                    handleOpenProduct(barendoItem);
+                    const newItem = MENU_ITEMS.find((m) => m.id === 'hr-sayur-10') || MENU_ITEMS[0];
+                    handleOpenProduct(newItem);
                   }}
                   className="px-3.5 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 active:scale-95 text-slate-950 text-xs font-black transition shadow-md flex items-center gap-1"
                 >
@@ -668,19 +668,19 @@ function OrderingAppContent() {
             {/* Poster / Dish Preview Image */}
             <div 
               onClick={() => {
-                const barendoItem = MENU_ITEMS.find((m) => m.id === 'hr-sayur-10') || MENU_ITEMS[0];
-                handleOpenProduct(barendoItem);
+                const newItem = MENU_ITEMS.find((m) => m.id === 'hr-sayur-10') || MENU_ITEMS[0];
+                handleOpenProduct(newItem);
               }}
-              className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden shadow-xl border-2 border-amber-300/80 shrink-0 cursor-pointer group"
+              className="relative w-26 h-26 sm:w-30 sm:h-30 rounded-2xl overflow-hidden shadow-xl border-2 border-amber-300/80 shrink-0 cursor-pointer group"
             >
               <img
-                src="/menu-spesial-barendo.jpg"
-                alt="Telur Dadar Krispi Barendo - Spesial HR Food"
+                src="/menu-telur-dadar-krispi.jpg"
+                alt="Telur Dadar Krispi - Menu Baru HR Food"
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex items-end justify-center pb-1">
                 <span className="text-[9px] font-black text-amber-300 uppercase tracking-tight px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-xs">
-                  Renyah &bull; Gurih
+                  Renyah &bull; Komplit
                 </span>
               </div>
             </div>

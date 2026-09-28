@@ -1299,11 +1299,11 @@ export const MENU_ITEMS: MenuItem[] = [
   },
   {
     "id": "hr-sayur-10",
-    "name": "Telur Dadar Krispi Barendo",
-    "category": "Sayur & Pelengkap",
-    "price": 4000,
-    "description": "Telur dadar berenda keriting renyah khas Minang/Sunda, gurih dengan irisan daun bawang dan pilihan sambal favoritmu.",
-    "image": "/menu-spesial-barendo.jpg",
+    "name": "Telur Dadar Krispi",
+    "category": "Paket Hemat",
+    "price": 12000,
+    "description": "Perpaduan telur dadar renyah gurih dengan taburan bawang kremes, sambal khas HR FOOD, lalapan segar, dan nasi hangat. Sederhana tapi selalu bikin nagih!",
+    "image": "/menu-telur-dadar-krispi.jpg",
     "isPopular": true,
     "options": [
       {
