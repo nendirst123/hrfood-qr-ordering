@@ -671,7 +671,7 @@ function OrderingAppContent() {
                 const newItem = MENU_ITEMS.find((m) => m.id === 'hr-sayur-10') || MENU_ITEMS[0];
                 handleOpenProduct(newItem);
               }}
-              className="relative w-26 h-26 sm:w-30 sm:h-30 rounded-2xl overflow-hidden shadow-xl border-2 border-amber-300/80 shrink-0 cursor-pointer group"
+              className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-2xl overflow-hidden shadow-xl border-2 border-amber-300/80 shrink-0 cursor-pointer group aspect-square"
             >
               <img
                 src="/menu-telur-dadar-krispi.jpg"
