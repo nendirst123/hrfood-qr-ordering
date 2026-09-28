@@ -19,10 +19,13 @@ import {
   MapPin,
   Phone,
   MessageCircle,
-  Navigation
+  Navigation,
+  Sparkles,
+  Download
 } from 'lucide-react';
 import { Order, OrderStatus } from '@/types/order';
 import { ThemeToggle } from '@/components/ThemeProvider';
+import { QRIS_MERCHANT_INFO } from '@/lib/qris';
 
 export default function OrderTrackingPage() {
   const params = useParams();
@@ -33,6 +36,7 @@ export default function OrderTrackingPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>('');
   const [isSimulatingPay, setIsSimulatingPay] = useState<boolean>(false);
+  const [showOriginalBarcode, setShowOriginalBarcode] = useState<boolean>(false);
   const retryCountRef = useRef<number>(0);
   const isSyncingRef = useRef<boolean>(false);
 
@@ -392,50 +396,132 @@ export default function OrderTrackingPage() {
           </div>
         )}
 
-        {/* QRIS Box jika belum bayar & metode qris */}
+        {/* QRIS Dinamis Otomatis Muncul Harga jika belum bayar & metode qris */}
         {!order.isPaid && order.paymentMethod === 'qris' && (
-          <div className="bg-gradient-to-b from-blue-50 to-white dark:from-blue-950/40 dark:to-slate-900 rounded-2xl p-5 border border-blue-200 dark:border-blue-900/60 text-center shadow-md transition-colors space-y-4">
-            <div className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 dark:text-blue-300 bg-blue-100/80 dark:bg-blue-950/70 px-3.5 py-1 rounded-full border border-blue-200 dark:border-blue-800">
-              <QrCode className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-              <span>QRIS DANA Resmi (Hrfood.id)</span>
+          <div className="bg-gradient-to-b from-blue-50/90 via-white to-blue-50/40 dark:from-blue-950/40 dark:via-slate-900 dark:to-slate-900 rounded-3xl p-5 border-2 border-blue-200 dark:border-blue-800/70 text-center shadow-lg transition-all space-y-4">
+            
+            {/* Header Badge */}
+            <div className="flex flex-col items-center gap-1.5">
+              <div className="inline-flex items-center gap-1.5 text-xs font-black text-blue-700 dark:text-blue-300 bg-blue-100/90 dark:bg-blue-900/60 px-3.5 py-1 rounded-full border border-blue-200 dark:border-blue-700 shadow-xs">
+                <Sparkles className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                <span>QRIS Dinamis &bull; Harga Otomatis Terdeteksi</span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Scan via aplikasi <strong>DANA</strong> atau e-wallet &amp; mobile banking apa pun.
+              </p>
             </div>
 
-            {/* Official QRIS Card */}
-            <div className="max-w-[280px] mx-auto bg-white p-3 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-750">
-              <div className="bg-slate-50 p-2 rounded-xl border border-slate-100 flex items-center justify-center">
-                <img
-                  src="/qris-dana.jpg"
-                  alt="QRIS DANA Hrfood.id NMID ID1025429569771"
-                  className="w-full h-auto object-contain rounded-lg"
-                />
-              </div>
-              <div className="mt-2.5 text-center space-y-0.5">
-                <div className="text-xs font-black text-slate-900">Hrfood.id</div>
-                <div className="text-[10px] text-slate-500 font-mono tracking-wider font-semibold">
-                  NMID: ID1025429569771
+            {/* Official National Standard QRIS Board */}
+            <div className="max-w-[300px] mx-auto bg-white rounded-2xl shadow-md border-2 border-slate-200 overflow-hidden text-slate-900">
+              {/* Top Banner Header: QRIS & GPN Logo */}
+              <div className="bg-white px-4 pt-3 pb-2 flex items-center justify-between border-b border-slate-100">
+                <div className="flex items-center gap-1.5">
+                  <div className="font-black text-lg tracking-tighter text-slate-900 flex items-center">
+                    <span className="text-red-600">Q</span>RIS
+                  </div>
+                  <span className="text-[8px] font-bold text-slate-400 uppercase leading-none block text-left">
+                    Standar<br />Nasional
+                  </span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] font-black tracking-tight text-red-600 uppercase border border-red-600 px-1 rounded-sm">
+                    GPN
+                  </span>
                 </div>
               </div>
+
+              {/* Merchant Info */}
+              <div className="px-3 pt-2 text-center border-b border-slate-100 pb-2">
+                <h4 className="text-sm font-black text-slate-950 uppercase tracking-wide">
+                  {QRIS_MERCHANT_INFO.merchantName}
+                </h4>
+                <div className="text-[10px] text-slate-600 font-mono font-semibold">
+                  NMID: {QRIS_MERCHANT_INFO.nmid}
+                </div>
+                <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[9px] font-bold mt-1">
+                  <span>⚡ QRIS Dinamis Otomatis</span>
+                </div>
+              </div>
+
+              {/* Dynamic QR Barcode Container */}
+              <div className="p-3 bg-white flex flex-col items-center justify-center relative">
+                {showOriginalBarcode ? (
+                  <img
+                    src="/qris-dana.jpg"
+                    alt="QRIS Asli Hrfood.id"
+                    className="w-full max-h-64 object-contain rounded-lg shadow-inner border border-slate-100"
+                  />
+                ) : (
+                  <div className="relative p-2 bg-white rounded-xl border border-slate-200 shadow-inner group">
+                    <img
+                      src={`/api/qris?amount=${order.total}`}
+                      alt={`Dynamic QRIS Rp ${order.total.toLocaleString('id-ID')}`}
+                      className="w-56 h-56 object-contain"
+                    />
+                    {/* Center DANA Emblem */}
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-9 h-9 rounded-lg bg-white p-0.5 shadow-md border border-blue-400 flex items-center justify-center pointer-events-none">
+                      <div className="w-full h-full rounded-md bg-[#118EEA] text-white font-black text-[9px] flex items-center justify-center shadow-xs">
+                        DANA
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="mt-2 text-center space-y-0.5">
+                  <span className="text-[9px] font-black text-slate-400 tracking-widest uppercase block">
+                    SATU QRIS UNTUK SEMUA PEMBAYARAN
+                  </span>
+                </div>
+              </div>
+
+              {/* Bottom Card Footer: Amount Confirmation */}
+              <div className="bg-blue-600 text-white px-3 py-2 text-center">
+                <span className="text-[10px] text-blue-100 block font-medium">Nominal Terkunci Otomatis:</span>
+                <span className="text-base font-black tracking-tight text-white block">
+                  Rp {order.total.toLocaleString('id-ID')}
+                </span>
+              </div>
             </div>
 
-            {/* Total tagihan */}
-            <div className="bg-white/80 dark:bg-slate-800/80 p-3 rounded-xl border border-blue-100 dark:border-slate-750">
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 block mb-0.5">Total yang Harus Dibayar:</span>
-              <strong className="text-blue-600 dark:text-blue-400 font-black text-lg block">
-                Rp {order.total.toLocaleString('id-ID')}
-              </strong>
+            {/* Quick Actions (Simpan QR / Toggle Barcode Asli) */}
+            <div className="flex items-center justify-center gap-2">
+              <a
+                href={`/api/qris?amount=${order.total}`}
+                download={`QRIS-HRFOOD-${order.orderNumber}-${order.total}.png`}
+                className="px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
+              >
+                <Download className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                <span>Simpan Barcode QR</span>
+              </a>
+
+              <button
+                type="button"
+                onClick={() => setShowOriginalBarcode(!showOriginalBarcode)}
+                className="px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium transition"
+              >
+                {showOriginalBarcode ? 'Lihat QR Dinamis' : 'Lihat Barcode Fisik Asli'}
+              </button>
             </div>
 
-            {/* Panduan Pembayaran via DANA */}
-            <div className="text-left text-xs bg-blue-50/60 dark:bg-slate-800/50 p-3 rounded-xl border border-blue-100 dark:border-slate-700 space-y-1.5 text-slate-700 dark:text-slate-300">
-              <span className="font-bold text-[11px] text-blue-900 dark:text-blue-200 block uppercase tracking-wide">
-                📱 Cara Bayar via DANA:
-              </span>
-              <ol className="list-decimal list-inside text-[11px] space-y-1 pl-1 text-slate-600 dark:text-slate-300">
-                <li>Buka aplikasi <strong>DANA</strong> di smartphone Anda</li>
-                <li>Pilih menu <strong>Pindai / Scan</strong> QRIS</li>
-                <li>Arahkan kamera ke barcode di atas atau upload screenshot</li>
-                <li>Periksa penerima <strong>Hrfood.id</strong> &amp; selesaikan pembayaran</li>
-              </ol>
+            {/* Petunjuk Interaktif */}
+            <div className="text-left text-xs bg-blue-50/70 dark:bg-slate-800/60 p-3.5 rounded-2xl border border-blue-200/80 dark:border-slate-700 space-y-2 text-slate-700 dark:text-slate-300">
+              <div className="flex items-center gap-1.5 text-blue-900 dark:text-blue-200 font-bold text-xs uppercase tracking-wide">
+                <span>⚡ Cara Bayar Bebas Ribet:</span>
+              </div>
+              <ul className="text-[11px] space-y-1.5 text-slate-600 dark:text-slate-300 list-disc list-inside">
+                <li>
+                  Buka aplikasi <strong>DANA</strong> (atau BCA, Mandiri, GoPay, OVO, ShopeePay).
+                </li>
+                <li>
+                  Pilih menu <strong>Pindai / Scan QRIS</strong>, lalu arahkan kamera ke barcode di atas (atau unggah dari galeri jika di HP yang sama).
+                </li>
+                <li>
+                  Nominal <strong className="text-blue-600 dark:text-blue-400">Rp {order.total.toLocaleString('id-ID')}</strong> akan <strong>langsung muncul otomatis</strong> di layar tanpa perlu Anda ketik!
+                </li>
+                <li>
+                  Periksa penerima <strong>Hrfood.id</strong> lalu klik <strong>Bayar</strong>.
+                </li>
+              </ul>
             </div>
 
             {/* Action Buttons */}
@@ -443,7 +529,7 @@ export default function OrderTrackingPage() {
               <button
                 disabled={isSimulatingPay}
                 onClick={handleSimulatePayQRIS}
-                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-98 text-white rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 shadow-md disabled:opacity-50"
+                className="w-full py-3 bg-blue-600 hover:bg-blue-700 active:scale-98 text-white rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 shadow-md disabled:opacity-50"
               >
                 {isSimulatingPay ? 'Memverifikasi Pembayaran...' : 'Konfirmasi Sudah Bayar QRIS'}
               </button>
@@ -454,7 +540,7 @@ export default function OrderTrackingPage() {
                 )}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-full py-2 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5"
+                className="w-full py-2.5 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5"
               >
                 <span>Kirim Bukti Bayar ke WhatsApp Resto</span>
               </a>
