@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAllOrders, createOrder } from '@/lib/order-store';
-import { getAvailabilityMap } from '@/lib/menu-store';
+import { getAvailabilityMap, syncMenuAvailability } from '@/lib/menu-store';
 import { OrderType, PaymentMethod, CartItem } from '@/types/order';
 
 export const dynamic = 'force-dynamic';
@@ -46,6 +46,7 @@ export async function POST(request: NextRequest) {
       isPaid,
       discountCode,
       discountAmount = 0,
+      clientAvailability,
     } = body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -53,6 +54,11 @@ export async function POST(request: NextRequest) {
         { success: false, error: 'Daftar pesanan tidak boleh kosong.' },
         { status: 400 }
       );
+    }
+
+    // Sinkronkan ketersediaan menu dari client jika ada (mengatasi stateless serverless microVM)
+    if (clientAvailability && typeof clientAvailability === 'object') {
+      syncMenuAvailability(clientAvailability);
     }
 
     // Validasi menu yang sedang habis stok

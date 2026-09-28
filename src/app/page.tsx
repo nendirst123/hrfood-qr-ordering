@@ -552,6 +552,7 @@ function OrderingAppContent() {
         paymentMethod,
         discountCode: appliedPromo?.code,
         discountAmount: discountAmount > 0 ? discountAmount : undefined,
+        clientAvailability: getLocalAvailabilityMap(),
       };
 
       if (orderType === 'delivery') {
