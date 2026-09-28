@@ -21,6 +21,7 @@ export interface MenuItem {
   image: string;
   isPopular?: boolean;
   isAvailable?: boolean;
+  updatedAt?: string | number;
   options?: MenuItemOption[];
 }
 

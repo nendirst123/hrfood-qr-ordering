@@ -126,6 +126,25 @@ export default function AdminDashboardPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
 
+  // Saklar Stok Filter & Search State
+  const [stockSearch, setStockSearch] = useState('');
+  const [stockFilter, setStockFilter] = useState<'all' | 'available' | 'sold_out'>('all');
+
+  // Helper LocalStorage untuk Ketersediaan Menu (Self-Healing Persistence)
+  const getLocalAvailabilityMap = (): Record<string, { isAvailable: boolean; updatedAt: number }> => {
+    try {
+      const raw = localStorage.getItem('hrfood_menu_availability_map');
+      if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    return {};
+  };
+
+  const saveLocalAvailabilityMap = (map: Record<string, { isAvailable: boolean; updatedAt: number }>) => {
+    try {
+      localStorage.setItem('hrfood_menu_availability_map', JSON.stringify(map));
+    } catch (e) {}
+  };
+
   useEffect(() => {
     const timer = setInterval(() => {
       const now = new Date();
@@ -134,7 +153,7 @@ export default function AdminDashboardPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // Ambil cache laporan dari localStorage pada mount awal
+  // Ambil cache laporan dan ketersediaan menu dari localStorage pada mount awal
   useEffect(() => {
     try {
       const cached = localStorage.getItem('hrfood_admin_report_cache');
@@ -146,6 +165,21 @@ export default function AdminDashboardPage() {
             parsed.recentOrders.forEach((o: Order) => seenAdminOrderIdsRef.current.add(o.id));
           }
           setLoading(false);
+        }
+      }
+
+      // Terapkan cache status stok habis lokal segera
+      const cachedAvail = localStorage.getItem('hrfood_menu_availability_map');
+      if (cachedAvail) {
+        const parsedAvail = JSON.parse(cachedAvail);
+        if (parsedAvail && typeof parsedAvail === 'object') {
+          setMenuItems(prev => prev.map(m => {
+            const entry = parsedAvail[m.id];
+            if (entry && typeof entry.isAvailable === 'boolean') {
+              return { ...m, isAvailable: entry.isAvailable };
+            }
+            return m;
+          }));
         }
       }
     } catch (e) {}
@@ -228,20 +262,72 @@ export default function AdminDashboardPage() {
 
         prevOrderCountRef.current = incomingReport.totalOrders;
       }
-      if (dataMenu.success) setMenuItems(dataMenu.items);
+      if (dataMenu.success && Array.isArray(dataMenu.items)) {
+        const localMap = getLocalAvailabilityMap();
+        let needsSyncToServer = false;
+        const syncPayload: Record<string, { isAvailable: boolean; updatedAt: number }> = {};
+
+        // Gabungkan menu dari server dengan localMap
+        const mergedMenuItems = dataMenu.items.map((srvItem: MenuItem) => {
+          const localEntry = localMap[srvItem.id];
+          if (!localEntry) {
+            localMap[srvItem.id] = {
+              isAvailable: srvItem.isAvailable !== false,
+              updatedAt: srvItem.updatedAt ? new Date(srvItem.updatedAt).getTime() : 0,
+            };
+            return srvItem;
+          }
+
+          const srvAvail = srvItem.isAvailable !== false;
+          const srvTime = srvItem.updatedAt ? new Date(srvItem.updatedAt).getTime() : 0;
+
+          // Jika local memiliki timestamp lebih baru
+          if (localEntry.updatedAt > srvTime) {
+            if (localEntry.isAvailable !== srvAvail) {
+              needsSyncToServer = true;
+              syncPayload[srvItem.id] = localEntry;
+            }
+            return {
+              ...srvItem,
+              isAvailable: localEntry.isAvailable,
+            };
+          } else {
+            localMap[srvItem.id] = {
+              isAvailable: srvAvail,
+              updatedAt: srvTime || localEntry.updatedAt,
+            };
+            return srvItem;
+          }
+        });
+
+        saveLocalAvailabilityMap(localMap);
+        setMenuItems(mergedMenuItems);
+
+        // Self-healing: pulihkan serverless instance jika ada data stok habis yang hilang
+        if (needsSyncToServer && Object.keys(syncPayload).length > 0) {
+          fetch('/api/menu', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ syncAvailability: syncPayload }),
+          }).catch(() => {});
+        }
+      }
+
       if (dataDelivery.success) setDeliverySettings(dataDelivery.data);
       if (dataPromos.success && Array.isArray(dataPromos.data)) setPromos(dataPromos.data);
       if (dataStore.success && dataStore.data) {
         setStoreConfig(dataStore.data);
-        setFormIsOpen(dataStore.data.isOpen);
-        setFormAutoSchedule(!!dataStore.data.autoSchedule);
-        setFormOpenTime(dataStore.data.openTime || '10:00');
-        setFormCloseTime(dataStore.data.closeTime || '22:00');
-        setFormClosedMessage(dataStore.data.closedMessage || '');
-        setFormStoreAddress(dataStore.data.storeAddress || 'Bunijaya, Kec. Gununghalu, Kab. Bandung Barat, Jawa Barat (Resto HR Food)');
-        setFormStoreLatitude(dataStore.data.storeLatitude ?? -7.0101905);
-        setFormStoreLongitude(dataStore.data.storeLongitude ?? 107.2760032);
-        setFormStorePhone(dataStore.data.storePhone || '0838-3843-2860');
+        if (!isStoreModalOpen) {
+          setFormIsOpen(dataStore.data.isOpen);
+          setFormAutoSchedule(!!dataStore.data.autoSchedule);
+          setFormOpenTime(dataStore.data.openTime || '10:00');
+          setFormCloseTime(dataStore.data.closeTime || '22:00');
+          setFormClosedMessage(dataStore.data.closedMessage || '');
+          setFormStoreAddress(dataStore.data.storeAddress || 'Bunijaya, Kec. Gununghalu, Kab. Bandung Barat, Jawa Barat (Resto HR Food)');
+          setFormStoreLatitude(dataStore.data.storeLatitude ?? -7.0101905);
+          setFormStoreLongitude(dataStore.data.storeLongitude ?? 107.2760032);
+          setFormStorePhone(dataStore.data.storePhone || '0838-3843-2860');
+        }
       }
     } catch (err) {
       console.error('Failed fetching admin data:', err);
@@ -480,21 +566,31 @@ export default function AdminDashboardPage() {
   // Toggle Stok Habis
   const handleToggleStock = async (item: MenuItem) => {
     const nextState = !item.isAvailable;
+    const now = Date.now();
     setUpdatingId(item.id);
-    setMenuItems(prev => prev.map(m => m.id === item.id ? { ...m, isAvailable: nextState } : m));
+    setMenuItems(prev => prev.map(m => m.id === item.id ? { ...m, isAvailable: nextState, updatedAt: new Date(now).toISOString() } : m));
+
+    // Update local availability map
+    const localMap = getLocalAvailabilityMap();
+    localMap[item.id] = { isAvailable: nextState, updatedAt: now };
+    saveLocalAvailabilityMap(localMap);
 
     try {
       const res = await fetch('/api/menu', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: item.id, isAvailable: nextState }),
+        body: JSON.stringify({ id: item.id, isAvailable: nextState, updatedAt: now }),
       });
       const data = await res.json();
       if (!data.success) {
+        localMap[item.id] = { isAvailable: !nextState, updatedAt: now };
+        saveLocalAvailabilityMap(localMap);
         setMenuItems(prev => prev.map(m => m.id === item.id ? { ...m, isAvailable: !nextState } : m));
       }
     } catch (err) {
       console.error('Failed toggling stock:', err);
+      localMap[item.id] = { isAvailable: !nextState, updatedAt: now };
+      saveLocalAvailabilityMap(localMap);
       setMenuItems(prev => prev.map(m => m.id === item.id ? { ...m, isAvailable: !nextState } : m));
     } finally {
       setUpdatingId(null);
@@ -1806,49 +1902,125 @@ export default function AdminDashboardPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {menuItems.map(item => {
-                const isAvailable = item.isAvailable !== false;
-                const isUpdating = updatingId === item.id;
-
-                return (
-                  <div
-                    key={item.id}
-                    className={`bg-white dark:bg-slate-800/90 border rounded-2xl p-3 shadow-sm flex flex-col justify-between transition ${
-                      isAvailable ? 'border-slate-200 dark:border-slate-700' : 'border-red-200 dark:border-red-900 bg-red-50/50 dark:bg-red-950/20'
-                    }`}
+            {/* Filter & Search Bar Saklar Stok */}
+            <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  placeholder="Cari nama menu atau kategori..."
+                  value={stockSearch}
+                  onChange={(e) => setStockSearch(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500"
+                />
+                <span className="absolute left-3 top-2.5 text-slate-400 text-xs">🔍</span>
+                {stockSearch && (
+                  <button
+                    onClick={() => setStockSearch('')}
+                    className="absolute right-3 top-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-900 flex-shrink-0 border border-slate-200 dark:border-slate-800">
-                        <img src={item.image} alt={item.name} className={`w-full h-full object-cover ${!isAvailable && 'grayscale'}`} />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">{item.name}</h4>
-                        <span className="text-[11px] text-slate-500 dark:text-slate-400">{toIdr(item.price)}</span>
-                      </div>
-                    </div>
+                    ✕
+                  </button>
+                )}
+              </div>
 
-                    <div className="mt-3 pt-2.5 border-t border-slate-200 dark:border-slate-700/60 flex items-center justify-between">
-                      <span className={`text-[10px] font-black uppercase ${isAvailable ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-                        {isAvailable ? '● Tersedia' : '✕ Habis'}
-                      </span>
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                <button
+                  onClick={() => setStockFilter('all')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap ${
+                    stockFilter === 'all'
+                      ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  Semua ({menuItems.length})
+                </button>
+                <button
+                  onClick={() => setStockFilter('available')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap ${
+                    stockFilter === 'available'
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
+                  }`}
+                >
+                  Tersedia ({menuItems.filter(m => m.isAvailable !== false).length})
+                </button>
+                <button
+                  onClick={() => setStockFilter('sold_out')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap ${
+                    stockFilter === 'sold_out'
+                      ? 'bg-red-600 text-white'
+                      : 'bg-slate-100 dark:bg-slate-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40'
+                  }`}
+                >
+                  Habis ({totalSoldOut})
+                </button>
+              </div>
+            </div>
 
-                      <button
-                        disabled={isUpdating}
-                        onClick={() => handleToggleStock(item)}
-                        className={`px-3 py-1 rounded-xl text-xs font-bold transition shadow ${
-                          isAvailable
-                            ? 'bg-red-600 hover:bg-red-500 text-white'
-                            : 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                        }`}
-                      >
-                        {isUpdating ? '...' : isAvailable ? 'Tandai Habis' : 'Tersedia'}
-                      </button>
-                    </div>
+            {(() => {
+              const displayedStockItems = menuItems.filter(item => {
+                const matchesSearch = item.name.toLowerCase().includes(stockSearch.toLowerCase()) || 
+                  (item.category && item.category.toLowerCase().includes(stockSearch.toLowerCase()));
+                if (!matchesSearch) return false;
+                if (stockFilter === 'available') return item.isAvailable !== false;
+                if (stockFilter === 'sold_out') return item.isAvailable === false;
+                return true;
+              });
+
+              if (displayedStockItems.length === 0) {
+                return (
+                  <div className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-2xl p-8 text-center text-slate-400 text-xs">
+                    Tidak ada menu yang sesuai dengan filter atau kata kunci "{stockSearch}".
                   </div>
                 );
-              })}
-            </div>
+              }
+
+              return (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {displayedStockItems.map(item => {
+                    const isAvailable = item.isAvailable !== false;
+                    const isUpdating = updatingId === item.id;
+
+                    return (
+                      <div
+                        key={item.id}
+                        className={`bg-white dark:bg-slate-800/90 border rounded-2xl p-3 shadow-sm flex flex-col justify-between transition ${
+                          isAvailable ? 'border-slate-200 dark:border-slate-700' : 'border-red-200 dark:border-red-900 bg-red-50/50 dark:bg-red-950/20'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-900 flex-shrink-0 border border-slate-200 dark:border-slate-800">
+                            <img src={item.image} alt={item.name} className={`w-full h-full object-cover ${!isAvailable && 'grayscale'}`} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">{item.name}</h4>
+                            <span className="text-[11px] text-slate-500 dark:text-slate-400">{toIdr(item.price)}</span>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 pt-2.5 border-t border-slate-200 dark:border-slate-700/60 flex items-center justify-between">
+                          <span className={`text-[10px] font-black uppercase ${isAvailable ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                            {isAvailable ? '● Tersedia' : '✕ Habis'}
+                          </span>
+
+                          <button
+                            disabled={isUpdating}
+                            onClick={() => handleToggleStock(item)}
+                            className={`px-3 py-1 rounded-xl text-xs font-bold transition shadow ${
+                              isAvailable
+                                ? 'bg-red-600 hover:bg-red-500 text-white'
+                                : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                            }`}
+                          >
+                            {isUpdating ? '...' : isAvailable ? 'Tandai Habis' : 'Tersedia'}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
         )}
 

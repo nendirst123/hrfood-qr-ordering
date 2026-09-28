@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAllOrders, createOrder } from '@/lib/order-store';
+import { getAvailabilityMap } from '@/lib/menu-store';
 import { OrderType, PaymentMethod, CartItem } from '@/types/order';
 
 export const dynamic = 'force-dynamic';
@@ -50,6 +51,21 @@ export async function POST(request: NextRequest) {
     if (!items || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json(
         { success: false, error: 'Daftar pesanan tidak boleh kosong.' },
+        { status: 400 }
+      );
+    }
+
+    // Validasi menu yang sedang habis stok
+    const availabilityMap = getAvailabilityMap();
+    const soldOutCartItems = items.filter((cartItem: CartItem) => {
+      const entry = availabilityMap[cartItem.itemId];
+      return entry && entry.isAvailable === false;
+    });
+
+    if (soldOutCartItems.length > 0) {
+      const names = soldOutCartItems.map((i: CartItem) => i.name).join(', ');
+      return NextResponse.json(
+        { success: false, error: `Maaf, menu "${names}" sedang habis stok. Silakan periksa kembali keranjang Anda.` },
         { status: 400 }
       );
     }

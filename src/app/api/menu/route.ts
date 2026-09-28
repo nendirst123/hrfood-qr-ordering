@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { 
   getMenuWithAvailability, 
+  getAvailabilityMap,
   setMenuItemAvailability, 
+  syncMenuAvailability,
   createMenuItem, 
   updateMenuItem, 
   deleteMenuItem 
@@ -10,24 +12,32 @@ import {
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-// GET: Ambil seluruh menu
+// GET: Ambil seluruh menu & peta ketersediaan
 export async function GET() {
   const items = getMenuWithAvailability();
-  return NextResponse.json({ success: true, items });
+  const availabilityMap = getAvailabilityMap();
+  return NextResponse.json({ success: true, items, availabilityMap });
 }
 
-// POST: Tambah menu baru ATAU toggle availability
+// POST: Tambah menu baru, toggle availability, ATAU sinkronisasi ketersediaan
 export async function POST(req: Request) {
   try {
     const body = await req.json();
 
-    // Jika hanya toggle stok: { id, isAvailable }
-    if (body.id && typeof body.isAvailable === 'boolean' && Object.keys(body).length <= 2) {
-      const ok = setMenuItemAvailability(body.id, body.isAvailable);
-      return NextResponse.json({ success: ok });
+    // 1. Sinkronisasi ketersediaan massal (Self-Healing Serverless)
+    if (body.syncAvailability && typeof body.syncAvailability === 'object') {
+      const mergedMap = syncMenuAvailability(body.syncAvailability);
+      const items = getMenuWithAvailability();
+      return NextResponse.json({ success: true, availabilityMap: mergedMap, items });
     }
 
-    // Jika membuat menu baru
+    // 2. Toggle stok satuan: { id, isAvailable, updatedAt? }
+    if (body.id && typeof body.isAvailable === 'boolean') {
+      const res = setMenuItemAvailability(body.id, body.isAvailable, body.updatedAt);
+      return NextResponse.json({ success: res.success, availabilityMap: res.availabilityMap });
+    }
+
+    // 3. Jika membuat menu baru
     const { name, category, price, description, image, isPopular } = body;
     if (!name || !price || !category) {
       return NextResponse.json({ success: false, error: 'Nama, kategori, dan harga wajib diisi' }, { status: 400 });

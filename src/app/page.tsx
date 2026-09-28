@@ -234,8 +234,39 @@ function OrderingAppContent() {
     fetchPromos();
   }, []);
 
+  // Helper LocalStorage untuk Ketersediaan Menu (Self-Healing Persistence)
+  const getLocalAvailabilityMap = (): Record<string, { isAvailable: boolean; updatedAt: number }> => {
+    if (typeof window === 'undefined') return {};
+    try {
+      const raw = localStorage.getItem('hrfood_menu_availability_map');
+      if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    return {};
+  };
+
   // Dynamic Menu Availability State
   const [menuList, setMenuList] = useState<MenuItem[]>(MENU_ITEMS);
+
+  // Pulihkan cache ketersediaan menu dari localStorage pada mount awal
+  useEffect(() => {
+    try {
+      const cachedAvail = localStorage.getItem('hrfood_menu_availability_map');
+      if (cachedAvail) {
+        const parsedAvail = JSON.parse(cachedAvail);
+        if (parsedAvail && typeof parsedAvail === 'object') {
+          setMenuList((prev) =>
+            prev.map((m) => {
+              const entry = parsedAvail[m.id];
+              if (entry && typeof entry.isAvailable === 'boolean') {
+                return { ...m, isAvailable: entry.isAvailable };
+              }
+              return m;
+            })
+          );
+        }
+      }
+    } catch (e) {}
+  }, []);
 
   useEffect(() => {
     const fetchMenuStatus = async () => {
@@ -243,7 +274,53 @@ function OrderingAppContent() {
         const res = await fetch('/api/menu');
         const data = await res.json();
         if (data.success && Array.isArray(data.items)) {
-          setMenuList(data.items);
+          const localMap = getLocalAvailabilityMap();
+          let needsSync = false;
+          const syncPayload: Record<string, { isAvailable: boolean; updatedAt: number }> = {};
+
+          const merged = data.items.map((srvItem: MenuItem) => {
+            const localEntry = localMap[srvItem.id];
+            if (!localEntry) {
+              localMap[srvItem.id] = {
+                isAvailable: srvItem.isAvailable !== false,
+                updatedAt: srvItem.updatedAt ? new Date(srvItem.updatedAt).getTime() : 0,
+              };
+              return srvItem;
+            }
+
+            const srvAvail = srvItem.isAvailable !== false;
+            const srvTime = srvItem.updatedAt ? new Date(srvItem.updatedAt).getTime() : 0;
+
+            if (localEntry.updatedAt > srvTime) {
+              if (localEntry.isAvailable !== srvAvail) {
+                needsSync = true;
+                syncPayload[srvItem.id] = localEntry;
+              }
+              return { ...srvItem, isAvailable: localEntry.isAvailable };
+            } else {
+              localMap[srvItem.id] = {
+                isAvailable: srvAvail,
+                updatedAt: srvTime || localEntry.updatedAt,
+              };
+              return srvItem;
+            }
+          });
+
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.setItem('hrfood_menu_availability_map', JSON.stringify(localMap));
+            } catch (e) {}
+          }
+
+          setMenuList(merged);
+
+          if (needsSync && Object.keys(syncPayload).length > 0) {
+            fetch('/api/menu', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ syncAvailability: syncPayload }),
+            }).catch(() => {});
+          }
         }
       } catch (err) {
         console.error('Failed fetching menu availability:', err);
@@ -266,6 +343,11 @@ function OrderingAppContent() {
 
   // Open Add Product Modal
   const handleOpenProduct = (item: MenuItem) => {
+    if (item.isAvailable === false) {
+      alert(`Mohon maaf, menu "${item.name}" saat ini sedang habis stok.`);
+      return;
+    }
+
     setSelectedProduct(item);
     setProductQuantity(1);
     setItemNotes('');
@@ -294,7 +376,10 @@ function OrderingAppContent() {
 
   // Add to Cart
   const handleAddToCart = () => {
-    if (!selectedProduct) return;
+    if (!selectedProduct || selectedProduct.isAvailable === false) {
+      alert('Mohon maaf, menu ini sedang habis stok.');
+      return;
+    }
 
     const chosenOptions: CartItemOptionSelected[] = Object.entries(selectedOptions).map(
       ([optionName, choice]) => ({
@@ -369,6 +454,14 @@ function OrderingAppContent() {
   const cartTotal = Math.max(0, cartSubtotal - discountAmount + currentDeliveryFee);
   const totalItemCount = cart.reduce((acc, item) => acc + item.quantity, 0);
 
+  // Cek apakah ada menu di keranjang yang stoknya habis
+  const soldOutItemsInCart = useMemo(() => {
+    return cart.filter((cartItem) => {
+      const liveItem = menuList.find((m) => m.id === cartItem.itemId);
+      return liveItem && liveItem.isAvailable === false;
+    });
+  }, [cart, menuList]);
+
   // Nomor WhatsApp aktif resto ternormalisasi
   const activeWhatsApp = useMemo(() => {
     const raw = storeConfig?.storePhone || deliverySettings?.whatsappNumber || '6283838432860';
@@ -416,6 +509,13 @@ function OrderingAppContent() {
   // Submit Order
   const handleSubmitOrder = async () => {
     if (cart.length === 0) return;
+
+    if (soldOutItemsInCart.length > 0) {
+      const names = soldOutItemsInCart.map((i) => i.name).join(', ');
+      alert(`Mohon maaf, menu "${names}" saat ini sedang habis stok. Silakan hapus menu tersebut dari keranjang Anda untuk melanjutkan pesanan.`);
+      return;
+    }
+
     if (!customerName.trim()) {
       alert('Mohon isi nama pemesan terlebih dahulu!');
       return;
@@ -648,42 +748,66 @@ function OrderingAppContent() {
                 Perpaduan telur dadar renyah gurih dengan taburan bawang kremes, sambal khas HR FOOD, lalapan segar, dan nasi hangat. Sederhana tapi selalu bikin nagih!
               </p>
               
-              <div className="mt-3 flex items-center gap-2">
-                <div className="text-xs font-black text-amber-300 bg-black/40 px-2.5 py-1 rounded-lg border border-amber-400/40">
-                  Cuma Rp 12.000
-                </div>
-                <button
-                  onClick={() => {
-                    const newItem = MENU_ITEMS.find((m) => m.id === 'hr-sayur-10') || MENU_ITEMS[0];
-                    handleOpenProduct(newItem);
-                  }}
-                  className="px-3.5 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 active:scale-95 text-slate-950 text-xs font-black transition shadow-md flex items-center gap-1"
-                >
-                  <span>Pesan Sekarang</span>
-                  <ArrowRight className="w-3 h-3" />
-                </button>
-              </div>
+              {(() => {
+                const heroItem = menuList.find((m) => m.id === 'hr-sayur-10') || menuList[0];
+                const isHeroAvailable = heroItem?.isAvailable !== false;
+
+                return (
+                  <div className="mt-3 flex items-center gap-2">
+                    <div className="text-xs font-black text-amber-300 bg-black/40 px-2.5 py-1 rounded-lg border border-amber-400/40">
+                      Cuma Rp 12.000
+                    </div>
+                    {isHeroAvailable ? (
+                      <button
+                        onClick={() => handleOpenProduct(heroItem)}
+                        className="px-3.5 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 active:scale-95 text-slate-950 text-xs font-black transition shadow-md flex items-center gap-1"
+                      >
+                        <span>Pesan Sekarang</span>
+                        <ArrowRight className="w-3 h-3" />
+                      </button>
+                    ) : (
+                      <span className="px-3.5 py-1 rounded-lg bg-red-600/90 text-white text-xs font-black shadow-md flex items-center gap-1 cursor-not-allowed">
+                        <span>Stok Habis</span>
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Poster / Dish Preview Image */}
-            <div 
-              onClick={() => {
-                const newItem = MENU_ITEMS.find((m) => m.id === 'hr-sayur-10') || MENU_ITEMS[0];
-                handleOpenProduct(newItem);
-              }}
-              className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-2xl overflow-hidden shadow-xl border-2 border-amber-300/80 shrink-0 cursor-pointer group aspect-square"
-            >
-              <img
-                src="/menu-telur-dadar-krispi.jpg"
-                alt="Telur Dadar Krispi - Menu Baru HR Food"
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex items-end justify-center pb-1">
-                <span className="text-[9px] font-black text-amber-300 uppercase tracking-tight px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-xs">
-                  Renyah &bull; Komplit
-                </span>
-              </div>
-            </div>
+            {(() => {
+              const heroItem = menuList.find((m) => m.id === 'hr-sayur-10') || menuList[0];
+              const isHeroAvailable = heroItem?.isAvailable !== false;
+
+              return (
+                <div 
+                  onClick={() => {
+                    if (isHeroAvailable) handleOpenProduct(heroItem);
+                  }}
+                  className={`relative w-28 h-28 sm:w-32 sm:h-32 rounded-2xl overflow-hidden shadow-xl border-2 shrink-0 aspect-square transition ${
+                    isHeroAvailable
+                      ? 'border-amber-300/80 cursor-pointer group'
+                      : 'border-red-400/80 cursor-not-allowed opacity-90'
+                  }`}
+                >
+                  <img
+                    src="/menu-telur-dadar-krispi.jpg"
+                    alt="Telur Dadar Krispi - Menu Baru HR Food"
+                    className={`w-full h-full object-cover transition-transform duration-300 ${
+                      isHeroAvailable ? 'group-hover:scale-105' : 'grayscale'
+                    }`}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent flex items-end justify-center pb-1">
+                    <span className={`text-[9px] font-black uppercase tracking-tight px-1.5 py-0.5 rounded ${
+                      isHeroAvailable ? 'text-amber-300 bg-black/60 backdrop-blur-xs' : 'text-white bg-red-600/90'
+                    }`}>
+                      {isHeroAvailable ? 'Renyah • Komplit' : '✕ Stok Habis'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
 
@@ -998,54 +1122,85 @@ function OrderingAppContent() {
               </button>
             </div>
 
+            {/* Warning jika ada menu habis di keranjang */}
+            {soldOutItemsInCart.length > 0 && (
+              <div className="mx-4 mt-3 p-3 bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-900 rounded-xl text-xs text-red-800 dark:text-red-300 flex items-start gap-2">
+                <span className="text-base shrink-0">⚠️</span>
+                <div>
+                  <strong className="block font-bold">Menu Habis Stok di Keranjang!</strong>
+                  <p className="text-[11px] mt-0.5 leading-snug">
+                    Menu &ldquo;{soldOutItemsInCart.map((i) => i.name).join(', ')}&rdquo; saat ini sedang habis stok. Silakan klik tombol <strong>Hapus</strong> pada item terkait agar Anda dapat melanjutkan checkout.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Cart Items List */}
             <div className="p-4 overflow-y-auto flex-1 space-y-3">
-              {cart.map((item, idx) => (
-                <div key={idx} className="p-3 bg-slate-50 dark:bg-slate-800/70 rounded-xl border border-slate-100 dark:border-slate-750 space-y-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">{item.name}</h4>
-                      {item.selectedOptions.length > 0 && (
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                          {item.selectedOptions.map((o) => `${o.choiceLabel}`).join(' • ')}
-                        </p>
-                      )}
-                      {item.notes && (
-                        <p className="text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 px-2 py-0.5 rounded mt-1 inline-block border border-amber-200/50 dark:border-amber-800/50">
-                          Catatan: &ldquo;{item.notes}&rdquo;
-                        </p>
-                      )}
-                    </div>
-                    <span className="text-xs font-bold text-rose-600 dark:text-rose-400 whitespace-nowrap">
-                      Rp {(item.unitPrice * item.quantity).toLocaleString('id-ID')}
-                    </span>
-                  </div>
+              {cart.map((item, idx) => {
+                const isItemSoldOut = menuList.find((m) => m.id === item.itemId)?.isAvailable === false;
 
-                  <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
-                    <button
-                      onClick={() => handleRemoveCartItem(idx)}
-                      className="text-[11px] text-rose-500 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 font-medium"
-                    >
-                      Hapus
-                    </button>
-                    <div className="flex items-center gap-2">
+                return (
+                  <div
+                    key={idx}
+                    className={`p-3 rounded-xl border space-y-2 transition ${
+                      isItemSoldOut
+                        ? 'bg-red-50/80 dark:bg-red-950/40 border-red-300 dark:border-red-800'
+                        : 'bg-slate-50 dark:bg-slate-800/70 border-slate-100 dark:border-slate-750'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">{item.name}</h4>
+                          {isItemSoldOut && (
+                            <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-red-600 text-white">
+                              Stok Habis
+                            </span>
+                          )}
+                        </div>
+                        {item.selectedOptions.length > 0 && (
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                            {item.selectedOptions.map((o) => `${o.choiceLabel}`).join(' • ')}
+                          </p>
+                        )}
+                        {item.notes && (
+                          <p className="text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 px-2 py-0.5 rounded mt-1 inline-block border border-amber-200/50 dark:border-amber-800/50">
+                            Catatan: &ldquo;{item.notes}&rdquo;
+                          </p>
+                        )}
+                      </div>
+                      <span className="text-xs font-bold text-rose-600 dark:text-rose-400 whitespace-nowrap">
+                        Rp {(item.unitPrice * item.quantity).toLocaleString('id-ID')}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
                       <button
-                        onClick={() => handleUpdateCartQty(idx, -1)}
-                        className="w-6 h-6 rounded bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-600"
+                        onClick={() => handleRemoveCartItem(idx)}
+                        className="text-[11px] text-rose-600 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 font-bold underline"
                       >
-                        <Minus className="w-3 h-3" />
+                        Hapus {isItemSoldOut && 'Menu Habis'}
                       </button>
-                      <span className="text-xs font-bold w-4 text-center">{item.quantity}</span>
-                      <button
-                        onClick={() => handleUpdateCartQty(idx, 1)}
-                        className="w-6 h-6 rounded bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-600"
-                      >
-                        <Plus className="w-3 h-3" />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleUpdateCartQty(idx, -1)}
+                          className="w-6 h-6 rounded bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-600"
+                        >
+                          <Minus className="w-3 h-3" />
+                        </button>
+                        <span className="text-xs font-bold w-4 text-center">{item.quantity}</span>
+                        <button
+                          onClick={() => handleUpdateCartQty(idx, 1)}
+                          className="w-6 h-6 rounded bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-600"
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
 
               {/* Form Data Pelanggan */}
               <div className="border-t border-slate-100 dark:border-slate-800 pt-3 space-y-3">
@@ -1469,12 +1624,14 @@ function OrderingAppContent() {
             {/* Footer Checkout Button */}
             <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-2">
               <button
-                disabled={isSubmitting || cart.length === 0 || !isStoreOpen}
+                disabled={isSubmitting || cart.length === 0 || !isStoreOpen || soldOutItemsInCart.length > 0}
                 onClick={handleSubmitOrder}
                 className="w-full py-3.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-xl text-sm font-bold shadow-md shadow-red-200 dark:shadow-none flex items-center justify-center gap-2 transition active:scale-[0.98]"
               >
                 {!isStoreOpen ? (
                   <span>⛔ Resto Sedang Tutup</span>
+                ) : soldOutItemsInCart.length > 0 ? (
+                  <span>⚠️ Hapus Menu Habis untuk Pesan</span>
                 ) : isSubmitting ? (
                   <span>Mengirim Pesanan...</span>
                 ) : (
