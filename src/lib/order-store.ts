@@ -175,8 +175,8 @@ export function createOrder(payload: {
     discountAmount,
     total,
     paymentMethod: payload.paymentMethod,
-    isPaid: payload.isPaid ?? (payload.paymentMethod === 'qris'),
-    status: payload.isPaid || payload.paymentMethod === 'qris' ? 'cooking' : 'pending_payment',
+    isPaid: Boolean(payload.isPaid),
+    status: payload.isPaid ? 'cooking' : 'pending_payment',
     createdAt: now,
     updatedAt: now,
   };

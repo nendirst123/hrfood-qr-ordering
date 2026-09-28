@@ -312,7 +312,11 @@ export default function OrderTrackingPage() {
             ) : (
               <span className="bg-amber-50 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/80 px-3 py-1 rounded-full flex items-center gap-1 text-[11px]">
                 <Clock className="w-3.5 h-3.5" />
-                {orderType === 'delivery' ? 'Bayar Tunai ke Kurir (COD)' : 'Menunggu Bayar di Kasir'}
+                {order.paymentMethod === 'qris'
+                  ? 'Menunggu Pembayaran QRIS DANA'
+                  : orderType === 'delivery'
+                  ? 'Bayar Tunai ke Kurir (COD)'
+                  : 'Menunggu Bayar di Kasir'}
               </span>
             )}
           </div>
