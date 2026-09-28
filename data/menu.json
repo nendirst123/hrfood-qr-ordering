@@ -1279,9 +1279,28 @@
     "name": "Telur Dadar Krispi Barendo",
     "category": "Sayur & Pelengkap",
     "price": 4000,
-    "description": "Telur dadar crispy mekar dengan renda keriting gurih keemasan dan irisan daun bawang wangi.",
-    "image": "/menu/telur-dadar-barendo.jpg",
-    "isPopular": false,
+    "description": "Sensasi renyah renda keriting gurih bertabur daun bawang harum & cocolan sambal segar khas HR FOOD! Tanpa tandingan!",
+    "image": "/menu-spesial-barendo.jpg",
+    "isPopular": true,
+    "options": [
+      {
+        "name": "Pilihan Varian Sambal",
+        "choices": [
+          {
+            "label": "Sambal Terasi (Klasik & Nagih)",
+            "extraPrice": 0
+          },
+          {
+            "label": "Sambal Bawang (Segar & Pedas)",
+            "extraPrice": 0
+          },
+          {
+            "label": "Sambal Cabe Ijo (Pedas Mantap)",
+            "extraPrice": 0
+          }
+        ]
+      }
+    ],
     "isAvailable": true
   },
   {

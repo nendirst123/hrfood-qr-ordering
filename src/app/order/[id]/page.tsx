@@ -390,30 +390,71 @@ export default function OrderTrackingPage() {
 
         {/* QRIS Box jika belum bayar & metode qris */}
         {!order.isPaid && order.paymentMethod === 'qris' && (
-          <div className="bg-gradient-to-b from-rose-50 to-white dark:from-rose-950/30 dark:to-slate-900 rounded-2xl p-5 border border-rose-200 dark:border-rose-900/60 text-center shadow-sm transition-colors">
-            <div className="inline-flex items-center gap-1 text-xs font-bold text-rose-700 dark:text-rose-400 bg-rose-100/70 dark:bg-rose-950/60 px-3 py-1 rounded-full mb-3 border border-rose-200 dark:border-rose-800/60">
-              <QrCode className="w-3.5 h-3.5" /> Scan QRIS di Bawah Ini
-            </div>
-            
-            <div className="w-48 h-48 mx-auto bg-white p-2 rounded-2xl shadow-inner border border-slate-200 flex items-center justify-center">
-              <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=HR-FOOD-${order.orderNumber}-TOTAL-${order.total}`}
-                alt="QRIS Code"
-                className="w-full h-full object-contain"
-              />
+          <div className="bg-gradient-to-b from-blue-50 to-white dark:from-blue-950/40 dark:to-slate-900 rounded-2xl p-5 border border-blue-200 dark:border-blue-900/60 text-center shadow-md transition-colors space-y-4">
+            <div className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 dark:text-blue-300 bg-blue-100/80 dark:bg-blue-950/70 px-3.5 py-1 rounded-full border border-blue-200 dark:border-blue-800">
+              <QrCode className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+              <span>QRIS DANA Resmi (Hrfood.id)</span>
             </div>
 
-            <p className="text-xs text-slate-600 dark:text-slate-400 mt-3">
-              Total Tagihan: <strong className="text-rose-600 dark:text-rose-400 font-extrabold text-sm">Rp {order.total.toLocaleString('id-ID')}</strong>
-            </p>
+            {/* Official QRIS Card */}
+            <div className="max-w-[280px] mx-auto bg-white p-3 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-750">
+              <div className="bg-slate-50 p-2 rounded-xl border border-slate-100 flex items-center justify-center">
+                <img
+                  src="/qris-dana.jpg"
+                  alt="QRIS DANA Hrfood.id NMID ID1025429569771"
+                  className="w-full h-auto object-contain rounded-lg"
+                />
+              </div>
+              <div className="mt-2.5 text-center space-y-0.5">
+                <div className="text-xs font-black text-slate-900">Hrfood.id</div>
+                <div className="text-[10px] text-slate-500 font-mono tracking-wider font-semibold">
+                  NMID: ID1025429569771
+                </div>
+              </div>
+            </div>
 
-            <button
-              disabled={isSimulatingPay}
-              onClick={handleSimulatePayQRIS}
-              className="mt-3 w-full py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow"
-            >
-              {isSimulatingPay ? 'Memverifikasi Pembayaran...' : 'Simulasi Pembayaran Berhasil'}
-            </button>
+            {/* Total tagihan */}
+            <div className="bg-white/80 dark:bg-slate-800/80 p-3 rounded-xl border border-blue-100 dark:border-slate-750">
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 block mb-0.5">Total yang Harus Dibayar:</span>
+              <strong className="text-blue-600 dark:text-blue-400 font-black text-lg block">
+                Rp {order.total.toLocaleString('id-ID')}
+              </strong>
+            </div>
+
+            {/* Panduan Pembayaran via DANA */}
+            <div className="text-left text-xs bg-blue-50/60 dark:bg-slate-800/50 p-3 rounded-xl border border-blue-100 dark:border-slate-700 space-y-1.5 text-slate-700 dark:text-slate-300">
+              <span className="font-bold text-[11px] text-blue-900 dark:text-blue-200 block uppercase tracking-wide">
+                📱 Cara Bayar via DANA:
+              </span>
+              <ol className="list-decimal list-inside text-[11px] space-y-1 pl-1 text-slate-600 dark:text-slate-300">
+                <li>Buka aplikasi <strong>DANA</strong> di smartphone Anda</li>
+                <li>Pilih menu <strong>Pindai / Scan</strong> QRIS</li>
+                <li>Arahkan kamera ke barcode di atas atau upload screenshot</li>
+                <li>Periksa penerima <strong>Hrfood.id</strong> &amp; selesaikan pembayaran</li>
+              </ol>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="space-y-2 pt-1">
+              <button
+                disabled={isSimulatingPay}
+                onClick={handleSimulatePayQRIS}
+                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-98 text-white rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 shadow-md disabled:opacity-50"
+              >
+                {isSimulatingPay ? 'Memverifikasi Pembayaran...' : 'Konfirmasi Sudah Bayar QRIS'}
+              </button>
+
+              <a
+                href={`https://wa.me/6283838432860?text=${encodeURIComponent(
+                  `Halo Admin HR FOOD, saya sudah transfer via QRIS DANA untuk pesanan #${order.orderNumber} senilai Rp ${order.total.toLocaleString('id-ID')}. Mohon dicek ya!`
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full py-2 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5"
+              >
+                <span>Kirim Bukti Bayar ke WhatsApp Resto</span>
+              </a>
+            </div>
           </div>
         )}
 

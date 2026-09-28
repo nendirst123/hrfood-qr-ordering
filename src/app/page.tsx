@@ -55,9 +55,14 @@ function OrderingAppContent() {
   const tableParam = searchParams.get('table') || '';
   const typeParam = (searchParams.get('type') as OrderType) || '';
 
+  // Fitur Meja dinonaktifkan sementara (dapat diaktifkan kembali kapan saja dengan mengubah nilai ini menjadi true)
+  const ENABLE_TABLE_ORDERING = false;
+
   // Order Mode: 'dine_in' | 'delivery' | 'takeaway'
   const [orderType, setOrderType] = useState<OrderType>(
-    typeParam === 'delivery' || typeParam === 'takeaway' ? typeParam : 'dine_in'
+    ENABLE_TABLE_ORDERING
+      ? (typeParam === 'delivery' || typeParam === 'takeaway' ? typeParam : 'dine_in')
+      : (typeParam === 'takeaway' ? 'takeaway' : 'delivery')
   );
 
   // State Store Status (Buka / Tutup)
@@ -72,7 +77,9 @@ function OrderingAppContent() {
 
   // State Meja (Dine-in)
   const [tableNumber, setTableNumber] = useState<string>(tableParam || '01');
-  const [isTableModalOpen, setIsTableModalOpen] = useState<boolean>(!tableParam && orderType === 'dine_in');
+  const [isTableModalOpen, setIsTableModalOpen] = useState<boolean>(
+    ENABLE_TABLE_ORDERING && !tableParam && orderType === 'dine_in'
+  );
   const [tempTableInput, setTempTableInput] = useState<string>(tableParam || '01');
 
   // State Delivery Jarak KM Otomatis & Alamat
@@ -82,8 +89,8 @@ function OrderingAppContent() {
   const [deliveryNotes, setDeliveryNotes] = useState<string>('');
   const [customerPhone, setCustomerPhone] = useState<string>('');
   const [pickupTime, setPickupTime] = useState<string>('15-20 Menit Lagi');
-  const [deliveryDistanceKm, setDeliveryDistanceKm] = useState<number>(1.8);
-  const [selectedVillagePresetId, setSelectedVillagePresetId] = useState<string>('preset-sukamaju');
+  const [deliveryDistanceKm, setDeliveryDistanceKm] = useState<number>(0.8);
+  const [selectedVillagePresetId, setSelectedVillagePresetId] = useState<string>('preset-desa-pusat');
   const [isDetectingGps, setIsDetectingGps] = useState<boolean>(false);
   const [locationStatusMsg, setLocationStatusMsg] = useState<{ text: string; isError?: boolean } | null>(null);
 
@@ -163,12 +170,12 @@ function OrderingAppContent() {
 
   // Sync param table & type
   useEffect(() => {
-    if (tableParam) {
+    if (tableParam && ENABLE_TABLE_ORDERING) {
       setTableNumber(tableParam);
       setTempTableInput(tableParam);
       setIsTableModalOpen(false);
     }
-    if (typeParam && (typeParam === 'delivery' || typeParam === 'takeaway' || typeParam === 'dine_in')) {
+    if (typeParam && (typeParam === 'delivery' || typeParam === 'takeaway' || (ENABLE_TABLE_ORDERING && typeParam === 'dine_in'))) {
       setOrderType(typeParam);
     }
   }, [tableParam, typeParam]);
@@ -517,7 +524,7 @@ function OrderingAppContent() {
           <div className="flex items-center gap-1.5">
             <ThemeToggle />
 
-            {orderType === 'dine_in' && (
+            {ENABLE_TABLE_ORDERING && orderType === 'dine_in' && (
               <button
                 onClick={() => setIsTableModalOpen(true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-xs font-semibold hover:bg-red-100 dark:hover:bg-red-900/50 transition shadow-sm"
@@ -550,18 +557,20 @@ function OrderingAppContent() {
         </div>
 
         {/* Order Mode Tab Pill Switcher */}
-        <div className="mt-2.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl grid grid-cols-3 gap-1 text-[11px] font-bold">
-          <button
-            onClick={() => setOrderType('dine_in')}
-            className={`py-1.5 rounded-lg flex items-center justify-center gap-1 transition ${
-              orderType === 'dine_in'
-                ? 'bg-white dark:bg-slate-700 text-red-700 dark:text-red-300 shadow-sm'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <Utensils className="w-3 h-3" />
-            <span>Di Meja</span>
-          </button>
+        <div className={`mt-2.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl grid ${ENABLE_TABLE_ORDERING ? 'grid-cols-3' : 'grid-cols-2'} gap-1 text-[11px] font-bold`}>
+          {ENABLE_TABLE_ORDERING && (
+            <button
+              onClick={() => setOrderType('dine_in')}
+              className={`py-1.5 rounded-lg flex items-center justify-center gap-1 transition ${
+                orderType === 'dine_in'
+                  ? 'bg-white dark:bg-slate-700 text-red-700 dark:text-red-300 shadow-sm'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <Utensils className="w-3 h-3" />
+              <span>Di Meja</span>
+            </button>
+          )}
 
           <button
             onClick={() => setOrderType('delivery')}
@@ -647,38 +656,58 @@ function OrderingAppContent() {
         </div>
       )}
 
-      {/* Banner Promo Hero */}
+      {/* Banner Promo Hero - Menu Spesial Baru */}
       <div className="p-4 space-y-3">
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-red-800 via-rose-700 to-amber-800 p-4 text-white shadow-lg">
-          <div className="relative z-10 flex items-center justify-between">
-            <div className="max-w-[240px]">
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-400/20 text-amber-300 text-[10px] font-black tracking-wider uppercase mb-1">
-                <Sparkles className="w-3 h-3" /> Masakan Rumahan Rasa Juara!
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-amber-600 via-rose-700 to-red-800 p-4 text-white shadow-lg border border-amber-500/30">
+          <div className="absolute -top-12 -right-12 w-40 h-40 bg-amber-400/20 rounded-full blur-2xl pointer-events-none" />
+          
+          <div className="relative z-10 flex items-center justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black tracking-wide uppercase mb-1.5 shadow-sm">
+                <Sparkles className="w-3 h-3 text-red-600 fill-red-600" /> MENU SPESIAL BARU
               </span>
-              <h2 className="text-lg font-black leading-tight">Tentukan Sendiri Level Pedasmu!</h2>
-              <p className="text-xs text-rose-100 mt-1">
-                3 Pilihan Sambal Mantap: <strong>Terasi</strong>, <strong>Bawang</strong> & <strong>Cabe Ijo</strong>!
+              <h2 className="text-base sm:text-lg font-black leading-tight text-white drop-shadow-sm">
+                Telur Dadar Krispi Barendo
+              </h2>
+              <p className="text-[11px] text-rose-100 line-clamp-2 mt-1 leading-snug">
+                Sensasi renyah renda keriting gurih bertabur daun bawang harum &amp; cocolan sambal segar khas HR FOOD!
               </p>
+              
               <div className="mt-3 flex items-center gap-2">
-                <span className="text-[11px] font-bold text-amber-300 bg-black/40 px-2 py-0.5 rounded-md border border-amber-400/30">
-                  Mulai Rp 2.000-an
-                </span>
+                <div className="text-xs font-black text-amber-300 bg-black/40 px-2.5 py-1 rounded-lg border border-amber-400/40">
+                  Cuma Rp 4.000
+                </div>
                 <button
-                  onClick={() => handleOpenProduct(MENU_ITEMS[0])}
-                  className="px-3 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black transition shadow-sm flex items-center gap-1"
+                  onClick={() => {
+                    const barendoItem = MENU_ITEMS.find((m) => m.id === 'hr-sayur-10') || MENU_ITEMS[0];
+                    handleOpenProduct(barendoItem);
+                  }}
+                  className="px-3.5 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 active:scale-95 text-slate-950 text-xs font-black transition shadow-md flex items-center gap-1"
                 >
-                  Pesan <ArrowRight className="w-3 h-3" />
+                  <span>Pesan Sekarang</span>
+                  <ArrowRight className="w-3 h-3" />
                 </button>
               </div>
             </div>
 
-            {/* Mascot Emblem on Banner */}
-            <div className="w-20 h-20 rounded-2xl bg-white/90 p-1.5 shadow-lg flex items-center justify-center flex-shrink-0">
+            {/* Poster / Dish Preview Image */}
+            <div 
+              onClick={() => {
+                const barendoItem = MENU_ITEMS.find((m) => m.id === 'hr-sayur-10') || MENU_ITEMS[0];
+                handleOpenProduct(barendoItem);
+              }}
+              className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden shadow-xl border-2 border-amber-300/80 shrink-0 cursor-pointer group"
+            >
               <img
-                src="/hrfood-emblem.png"
-                alt="HR Food Mascot"
-                className="w-full h-full object-contain"
+                src="/menu-spesial-barendo.jpg"
+                alt="Telur Dadar Krispi Barendo - Spesial HR Food"
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
               />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex items-end justify-center pb-1">
+                <span className="text-[9px] font-black text-amber-300 uppercase tracking-tight px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-xs">
+                  Renyah &bull; Gurih
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -1409,19 +1438,41 @@ function OrderingAppContent() {
                     onClick={() => setPaymentMethod('qris')}
                     className={`p-2.5 rounded-xl border text-left transition flex flex-col justify-between ${
                       paymentMethod === 'qris'
-                        ? 'border-rose-600 bg-rose-50/70 dark:bg-rose-950/50 text-rose-950 dark:text-rose-200 font-bold'
+                        ? 'border-blue-600 bg-blue-50/80 dark:bg-blue-950/50 text-blue-950 dark:text-blue-200 font-bold ring-1 ring-blue-500'
                         : 'border-slate-200 dark:border-slate-750 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
                     }`}
                   >
                     <div className="flex items-center gap-1.5">
-                      <CreditCard className="w-4 h-4 text-rose-600 dark:text-rose-400" />
-                      <span className="text-xs">QRIS Instan</span>
+                      <CreditCard className="w-4 h-4 text-[#118EEA]" />
+                      <span className="text-xs">QRIS DANA</span>
                     </div>
                     <span className="text-[10px] text-slate-500 dark:text-slate-400 font-normal mt-1">
-                      Scan via Gopay/OVO/BCA
+                      Scan via DANA / e-Wallet
                     </span>
                   </button>
                 </div>
+
+                {paymentMethod === 'qris' && (
+                  <div className="mt-2.5 p-3 rounded-xl bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-900/60 text-xs space-y-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-[#118EEA] text-white flex items-center justify-center font-black text-[11px] shrink-0 shadow-sm">
+                        DANA
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-bold text-blue-950 dark:text-blue-100 flex items-center gap-1.5 text-xs">
+                          <span>QRIS DANA (Hrfood.id)</span>
+                          <span className="text-[9px] bg-blue-600 text-white px-1.5 py-0.5 rounded font-bold">Resmi</span>
+                        </div>
+                        <div className="text-[10px] text-blue-700 dark:text-blue-300 truncate">
+                          NMID: ID1025429569771 &bull; A.N: Hrfood.id
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug">
+                      Barcode QRIS resmi akan tampil otomatis di layar status pesanan setelah klik <strong>&quot;Kirim Pesanan&quot;</strong>.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Rincian Biaya */}

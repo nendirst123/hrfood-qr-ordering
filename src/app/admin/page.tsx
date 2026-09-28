@@ -86,9 +86,9 @@ export default function AdminDashboardPage() {
   const [formOpenTime, setFormOpenTime] = useState('10:00');
   const [formCloseTime, setFormCloseTime] = useState('22:00');
   const [formClosedMessage, setFormClosedMessage] = useState('');
-  const [formStoreAddress, setFormStoreAddress] = useState('Jl. Babakan No. 12, Resto HR Food');
-  const [formStoreLatitude, setFormStoreLatitude] = useState<number | string>(-6.9175);
-  const [formStoreLongitude, setFormStoreLongitude] = useState<number | string>(107.6191);
+  const [formStoreAddress, setFormStoreAddress] = useState('Bunijaya, Kec. Gununghalu, Kab. Bandung Barat, Jawa Barat (Resto HR Food)');
+  const [formStoreLatitude, setFormStoreLatitude] = useState<number | string>(-7.0101905);
+  const [formStoreLongitude, setFormStoreLongitude] = useState<number | string>(107.2760032);
   const [formStorePhone, setFormStorePhone] = useState('0838-3843-2860');
   const [isDetectingStoreGps, setIsDetectingStoreGps] = useState(false);
   const [storeGpsStatus, setStoreGpsStatus] = useState<string | null>(null);
@@ -238,9 +238,9 @@ export default function AdminDashboardPage() {
         setFormOpenTime(dataStore.data.openTime || '10:00');
         setFormCloseTime(dataStore.data.closeTime || '22:00');
         setFormClosedMessage(dataStore.data.closedMessage || '');
-        setFormStoreAddress(dataStore.data.storeAddress || 'Jl. Babakan No. 12, Resto HR Food');
-        setFormStoreLatitude(dataStore.data.storeLatitude ?? -6.9175);
-        setFormStoreLongitude(dataStore.data.storeLongitude ?? 107.6191);
+        setFormStoreAddress(dataStore.data.storeAddress || 'Bunijaya, Kec. Gununghalu, Kab. Bandung Barat, Jawa Barat (Resto HR Food)');
+        setFormStoreLatitude(dataStore.data.storeLatitude ?? -7.0101905);
+        setFormStoreLongitude(dataStore.data.storeLongitude ?? 107.2760032);
         setFormStorePhone(dataStore.data.storePhone || '0838-3843-2860');
       }
     } catch (err) {
@@ -551,8 +551,8 @@ export default function AdminDashboardPage() {
         closeTime: formCloseTime,
         closedMessage: formClosedMessage,
         storeAddress: formStoreAddress,
-        storeLatitude: Number(formStoreLatitude) || -6.9175,
-        storeLongitude: Number(formStoreLongitude) || 107.6191,
+        storeLatitude: Number(formStoreLatitude) || -7.0101905,
+        storeLongitude: Number(formStoreLongitude) || 107.2760032,
         storePhone: formStorePhone,
       };
       const res = await fetch('/api/store-config', {
@@ -1591,7 +1591,7 @@ export default function AdminDashboardPage() {
                     <span>📍</span> Ubah Lokasi & GPS Toko
                   </button>
                   <a
-                    href={`https://www.google.com/maps?q=${storeConfig?.storeLatitude || -6.9175},${storeConfig?.storeLongitude || 107.6191}`}
+                    href={`https://www.google.com/maps?q=${storeConfig?.storeLatitude || -7.0101905},${storeConfig?.storeLongitude || 107.2760032}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
@@ -1608,7 +1608,7 @@ export default function AdminDashboardPage() {
                     Alamat Fisik Resto:
                   </span>
                   <p className="text-xs font-bold text-slate-900 dark:text-white leading-relaxed">
-                    {storeConfig?.storeAddress || 'Jl. Babakan No. 12, Resto HR Food'}
+                    {storeConfig?.storeAddress || 'Bunijaya, Kec. Gununghalu, Kab. Bandung Barat, Jawa Barat (Resto HR Food)'}
                   </p>
                 </div>
 
@@ -1617,7 +1617,7 @@ export default function AdminDashboardPage() {
                     Koordinat GPS Toko:
                   </span>
                   <p className="text-xs font-mono font-bold text-purple-700 dark:text-purple-300">
-                    {storeConfig?.storeLatitude ?? -6.9175}, {storeConfig?.storeLongitude ?? 107.6191}
+                    {storeConfig?.storeLatitude ?? -7.0101905}, {storeConfig?.storeLongitude ?? 107.2760032}
                   </p>
                 </div>
 
@@ -2577,7 +2577,7 @@ export default function AdminDashboardPage() {
                       required
                       value={formStoreLatitude}
                       onChange={e => setFormStoreLatitude(e.target.value)}
-                      placeholder="-6.9175"
+                      placeholder="-7.0101905"
                       className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-purple-500 font-mono"
                     />
                   </div>
@@ -2591,7 +2591,7 @@ export default function AdminDashboardPage() {
                       required
                       value={formStoreLongitude}
                       onChange={e => setFormStoreLongitude(e.target.value)}
-                      placeholder="107.6191"
+                      placeholder="107.2760032"
                       className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-purple-500 font-mono"
                     />
                   </div>

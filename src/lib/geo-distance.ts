@@ -5,10 +5,10 @@ export interface Coordinates {
   longitude: number;
 }
 
-// Pusat Koordinat Resto HR Food (Titik Pangkal Pengantaran)
+// Pusat Koordinat Resto HR Food (Titik Pangkal Pengantaran - Bunijaya, Gununghalu)
 export const RESTO_COORDINATES: Coordinates = {
-  latitude: -6.9175,
-  longitude: 107.6191,
+  latitude: -7.0101905,
+  longitude: 107.2760032,
 };
 
 // Preset Wilayah / Desa / Kompleks Sekitar HR Food (Bagi pelanggan yang memilih manual tanpa GPS)
@@ -23,52 +23,45 @@ export interface VillagePreset {
 export const LOCAL_VILLAGE_PRESETS: VillagePreset[] = [
   {
     id: 'preset-desa-pusat',
-    name: 'Desa Krajan / Sekitar Resto (< 1 km)',
-    description: 'Area pasar, balai desa, dan pertokoan dekat HR Food',
+    name: 'Desa Bunijaya / Sekitar Resto (< 1 km)',
+    description: 'Area pasar, balai desa Bunijaya, dan pertokoan dekat HR Food',
     nominalKm: 0.8,
-    coords: { latitude: -6.9182, longitude: 107.6210 },
+    coords: { latitude: -7.0108, longitude: 107.2770 },
   },
   {
-    id: 'preset-sukamaju',
-    name: 'Dusun Sukamaju / Babakan (~1.8 km)',
-    description: 'Pemukiman warga, pondok pesantren, dan masjid jami',
+    id: 'preset-gununghalu',
+    name: 'Desa Gununghalu / Sukasirna (~1.8 km)',
+    description: 'Pemukiman warga, kantor kecamatan, dan pertigaan Gununghalu',
     nominalKm: 1.8,
-    coords: { latitude: -6.9240, longitude: 107.6315 },
+    coords: { latitude: -7.0180, longitude: 107.2840 },
   },
   {
-    id: 'preset-karanganyar',
-    name: 'Desa Karanganyar & Rawasari (~2.7 km)',
-    description: 'Perkampungan timur, sekolah SMP/SMA, dan lapangan desa',
-    nominalKm: 2.7,
-    coords: { latitude: -6.9325, longitude: 107.6360 },
+    id: 'preset-sirnajaya',
+    name: 'Desa Sirnajaya & Sindangjaya (~2.8 km)',
+    description: 'Perkampungan timur, sekolah SMP/SMA, dan area perumahan warga',
+    nominalKm: 2.8,
+    coords: { latitude: -7.0250, longitude: 107.2890 },
   },
   {
-    id: 'preset-griya-asri',
-    name: 'Perumahan Griya Indah / Asri (~4.2 km)',
-    description: 'Komplek perumahan, ruko baru, dan klinik kesehatan',
+    id: 'preset-celak',
+    name: 'Desa Celak & Sekitarnya (~4.2 km)',
+    description: 'Komplek pemukiman, ruko, klinik kesehatan, dan pesantren',
     nominalKm: 4.2,
-    coords: { latitude: -6.9440, longitude: 107.6430 },
+    coords: { latitude: -7.0380, longitude: 107.2950 },
   },
   {
-    id: 'preset-mekarwangi',
-    name: 'Desa Mekarwangi & Sekitarnya (~5.8 km)',
-    description: 'Jalur jalan raya utama dan perkampungan barat',
+    id: 'preset-rongga',
+    name: 'Wilayah Rongga & Perbatasan (~5.8 km)',
+    description: 'Jalur jalan raya utama dan perkampungan batas barat',
     nominalKm: 5.8,
-    coords: { latitude: -6.9580, longitude: 107.6520 },
-  },
-  {
-    id: 'preset-industri',
-    name: 'Kawasan Pabrik & Pergudangan (~7.5 km)',
-    description: 'Area industri, mess karyawan, dan gerbang tol',
-    nominalKm: 7.5,
-    coords: { latitude: -6.9710, longitude: 107.6610 },
+    coords: { latitude: -7.0520, longitude: 107.3020 },
   },
   {
     id: 'preset-luar-wilayah',
-    name: 'Perbatasan / Luar Kecamatan (~9.5 km)',
-    description: 'Wilayah tetangga kecamatan / perbatasan',
-    nominalKm: 9.5,
-    coords: { latitude: -6.9950, longitude: 107.6850 },
+    name: 'Radius Luar Kecamatan (> 7 km)',
+    description: 'Wilayah tetangga kecamatan / perbatasan radius jauh',
+    nominalKm: 7.5,
+    coords: { latitude: -7.0700, longitude: 107.3150 },
   },
 ];
 
