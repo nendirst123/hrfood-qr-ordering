@@ -631,46 +631,21 @@ function OrderingAppContent() {
         </div>
       )}
 
-      {/* Mode Banner Info Alert */}
-      {orderType === 'delivery' && (
-        <div className="mx-4 mt-3 bg-gradient-to-r from-purple-500/10 via-purple-600/5 to-indigo-500/10 dark:from-purple-950/40 dark:to-indigo-950/30 border border-purple-200 dark:border-purple-800/60 rounded-xl p-3 flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 flex items-center justify-center flex-shrink-0">
-            <Bike className="w-4 h-4" />
-          </div>
-          <div className="flex-1 text-xs">
-            <span className="font-bold text-purple-900 dark:text-purple-200 block">Layanan Pesan Antar Online Aktif!</span>
-            <span className="text-[11px] text-purple-700 dark:text-purple-300">Deteksi jarak otomatis & diantar hangat ke alamat Anda.</span>
-          </div>
-        </div>
-      )}
-
-      {orderType === 'takeaway' && (
-        <div className="mx-4 mt-3 bg-gradient-to-r from-emerald-500/10 via-emerald-600/5 to-teal-500/10 dark:from-emerald-950/40 dark:to-teal-950/30 border border-emerald-200 dark:border-emerald-800/60 rounded-xl p-3 flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 flex items-center justify-center flex-shrink-0">
-            <Package className="w-4 h-4" />
-          </div>
-          <div className="flex-1 text-xs">
-            <span className="font-bold text-emerald-900 dark:text-emerald-200 block">Mode Bawa Pulang / Takeaway</span>
-            <span className="text-[11px] text-emerald-700 dark:text-emerald-300">Pesan sekarang tanpa antre, ambil langsung saat matang.</span>
-          </div>
-        </div>
-      )}
-
-      {/* Banner Promo Hero - Menu Spesial Baru */}
+      {/* Banner Promo Hero - Menu Spesial */}
       <div className="p-4 space-y-3">
         <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-amber-600 via-rose-700 to-red-800 p-4 text-white shadow-lg border border-amber-500/30">
           <div className="absolute -top-12 -right-12 w-40 h-40 bg-amber-400/20 rounded-full blur-2xl pointer-events-none" />
           
           <div className="relative z-10 flex items-center justify-between gap-3">
             <div className="flex-1 min-w-0">
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black tracking-wide uppercase mb-1.5 shadow-sm">
-                <Sparkles className="w-3 h-3 text-red-600 fill-red-600" /> MENU SPESIAL BARU
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black tracking-wide uppercase mb-1.5 shadow-sm">
+                <Sparkles className="w-3 h-3 text-red-600 fill-red-600" /> MENU SPESIAL
               </span>
               <h2 className="text-base sm:text-lg font-black leading-tight text-white drop-shadow-sm">
                 Telur Dadar Krispi Barendo
               </h2>
               <p className="text-[11px] text-rose-100 line-clamp-2 mt-1 leading-snug">
-                Sensasi renyah renda keriting gurih bertabur daun bawang harum &amp; cocolan sambal segar khas HR FOOD!
+                Telur dadar berenda keriting renyah khas Minang/Sunda, gurih dengan daun bawang &amp; pilihan sambal pedas favoritmu.
               </p>
               
               <div className="mt-3 flex items-center gap-2">
@@ -712,44 +687,23 @@ function OrderingAppContent() {
           </div>
         </div>
 
-        {/* 3 Sambal Khas Showcase */}
-        <div className="bg-emerald-950 dark:bg-emerald-950/80 text-white rounded-2xl p-3 shadow-md border border-emerald-800/60">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-1.5">
-              <span className="text-base">🌶️</span>
-              <h3 className="text-xs font-black text-amber-400 uppercase tracking-wider">3 Sambal Khas HR Food</h3>
-            </div>
-            <span className="text-[10px] text-emerald-300 font-medium">Bisa Pilih Tiap Lauk</span>
-          </div>
-
-          <div className="grid grid-cols-3 gap-2">
-            <div
-              onClick={() => setSelectedCategory('Aneka Sambal')}
-              className="bg-emerald-900/60 hover:bg-emerald-900 border border-emerald-700/50 rounded-xl p-1.5 text-center cursor-pointer transition active:scale-95"
-            >
-              <div className="text-base mb-0.5">🔥</div>
-              <h4 className="text-[11px] font-bold text-amber-300">Terasi</h4>
-              <p className="text-[9px] text-emerald-200">Gurih & Nagih</p>
-            </div>
-
-            <div
-              onClick={() => setSelectedCategory('Aneka Sambal')}
-              className="bg-emerald-900/60 hover:bg-emerald-900 border border-emerald-700/50 rounded-xl p-1.5 text-center cursor-pointer transition active:scale-95"
-            >
-              <div className="text-base mb-0.5">🧅</div>
-              <h4 className="text-[11px] font-bold text-amber-300">Bawang</h4>
-              <p className="text-[9px] text-emerald-200">Aroma Sedap</p>
-            </div>
-
-            <div
-              onClick={() => setSelectedCategory('Aneka Sambal')}
-              className="bg-emerald-900/60 hover:bg-emerald-900 border border-emerald-700/50 rounded-xl p-1.5 text-center cursor-pointer transition active:scale-95"
-            >
-              <div className="text-base mb-0.5">🍃</div>
-              <h4 className="text-[11px] font-bold text-amber-300">Cabe Ijo</h4>
-              <p className="text-[9px] text-emerald-200">Segar Pedas</p>
+        {/* 3 Sambal Khas Strip Ringkas */}
+        <div 
+          onClick={() => setSelectedCategory('Aneka Sambal')}
+          className="bg-emerald-950 dark:bg-emerald-950/80 text-white rounded-xl px-3 py-2 shadow-sm border border-emerald-800/60 flex items-center justify-between cursor-pointer hover:bg-emerald-900/90 transition active:scale-[0.99]"
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-sm">🌶️</span>
+            <span className="text-xs font-bold text-amber-400">3 Sambal Khas:</span>
+            <div className="flex items-center gap-1.5 text-[11px] text-emerald-200">
+              <span className="bg-emerald-900/80 px-2 py-0.5 rounded-md border border-emerald-700/50">🔥 Terasi</span>
+              <span className="bg-emerald-900/80 px-2 py-0.5 rounded-md border border-emerald-700/50">🧅 Bawang</span>
+              <span className="bg-emerald-900/80 px-2 py-0.5 rounded-md border border-emerald-700/50">🍃 Cabe Ijo</span>
             </div>
           </div>
+          <span className="text-[10px] text-emerald-300 font-medium hover:underline flex items-center gap-0.5">
+            Pilih <ArrowRight className="w-2.5 h-2.5" />
+          </span>
         </div>
 
         {/* Category Pills Slider */}
@@ -774,7 +728,7 @@ function OrderingAppContent() {
       <div className="px-4 space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-            {selectedCategory === 'Semua' ? 'Daftar Menu Lezat' : selectedCategory} ({filteredItems.length})
+            {selectedCategory === 'Semua' ? 'Daftar Menu' : selectedCategory} ({filteredItems.length})
           </h3>
           {selectedCategory !== 'Semua' && (
             <button 
@@ -1032,7 +986,7 @@ function OrderingAppContent() {
                 <ShoppingBag className="w-5 h-5 text-rose-600 dark:text-rose-400" />
                 <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
                   {orderType === 'dine_in' && `Rincian Pesanan Meja ${tableNumber}`}
-                  {orderType === 'delivery' && 'Pesanan Antar (Delivery Otomatis)'}
+                  {orderType === 'delivery' && 'Pesanan Antar (Delivery)'}
                   {orderType === 'takeaway' && 'Pesanan Bawa Pulang (Takeaway)'}
                 </h3>
               </div>
@@ -1128,7 +1082,7 @@ function OrderingAppContent() {
                   </div>
                 )}
 
-                {/* Form Spesifik Delivery (Deteksi KM Otomatis) */}
+                {/* Form Spesifik Delivery */}
                 {orderType === 'delivery' && (
                   <div className="space-y-3 bg-purple-50/70 dark:bg-purple-950/40 p-3 rounded-2xl border border-purple-100 dark:border-purple-800/60">
                     <div className="flex items-center justify-between">
@@ -1143,7 +1097,7 @@ function OrderingAppContent() {
                       )}
                     </div>
 
-                    {/* Tombol GPS Otomatis */}
+                    {/* Tombol GPS */}
                     <button
                       type="button"
                       onClick={handleDetectGps}
@@ -1151,7 +1105,7 @@ function OrderingAppContent() {
                       className="w-full py-2.5 px-3 bg-purple-600 hover:bg-purple-700 active:scale-[0.98] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition disabled:opacity-60"
                     >
                       <Navigation className={`w-4 h-4 ${isDetectingGps ? 'animate-spin' : ''}`} />
-                      <span>{isDetectingGps ? 'Mendeteksi Posisi Anda...' : '📍 Deteksi Lokasi GPS Saya (Otomatis)'}</span>
+                      <span>{isDetectingGps ? 'Mendeteksi Posisi Anda...' : '📍 Gunakan Lokasi GPS Saya'}</span>
                     </button>
 
                     {/* Dropdown Preset Wilayah / Desa Sekitar */}
@@ -1186,11 +1140,11 @@ function OrderingAppContent() {
                       </div>
                     )}
 
-                    {/* Card Ringkasan Jarak KM & Ongkir Otomatis */}
+                    {/* Card Ringkasan Jarak KM & Ongkir */}
                     <div className="bg-purple-100/80 dark:bg-purple-900/40 border border-purple-200 dark:border-purple-700/60 rounded-xl p-2.5 flex items-center justify-between text-xs">
                       <div>
                         <span className="text-[10px] uppercase font-black tracking-wider text-purple-700 dark:text-purple-300 block">
-                          Jarak Terdeteksi Otomatis:
+                          Jarak Pengantaran:
                         </span>
                         <div className="flex items-center gap-1.5 mt-0.5">
                           <span className="font-extrabold text-sm text-purple-950 dark:text-purple-100">
@@ -1203,7 +1157,7 @@ function OrderingAppContent() {
                       </div>
                       <div className="text-right">
                         <span className="text-[10px] uppercase font-black tracking-wider text-purple-700 dark:text-purple-300 block">
-                          Tarif Ongkir:
+                          Ongkir:
                         </span>
                         <span className="font-black text-sm text-purple-900 dark:text-purple-200 mt-0.5 block">
                           {currentDeliveryFee === 0 ? (

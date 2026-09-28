@@ -404,7 +404,7 @@ export default function OrderTrackingPage() {
             <div className="flex flex-col items-center gap-1.5">
               <div className="inline-flex items-center gap-1.5 text-xs font-black text-blue-700 dark:text-blue-300 bg-blue-100/90 dark:bg-blue-900/60 px-3.5 py-1 rounded-full border border-blue-200 dark:border-blue-700 shadow-xs">
                 <Sparkles className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-                <span>QRIS Dinamis &bull; Harga Otomatis Terdeteksi</span>
+                <span>QRIS DANA &bull; Nominal Pas</span>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
                 Scan via aplikasi <strong>DANA</strong> atau e-wallet &amp; mobile banking apa pun.
@@ -438,8 +438,8 @@ export default function OrderTrackingPage() {
                 <div className="text-[10px] text-slate-600 font-mono font-semibold">
                   NMID: {QRIS_MERCHANT_INFO.nmid}
                 </div>
-                <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[9px] font-bold mt-1">
-                  <span>⚡ QRIS Dinamis Otomatis</span>
+                <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[9px] font-semibold mt-1">
+                  <span>DANA &bull; Bayar Pas</span>
                 </div>
               </div>
 
@@ -476,7 +476,7 @@ export default function OrderTrackingPage() {
 
               {/* Bottom Card Footer: Amount Confirmation */}
               <div className="bg-blue-600 text-white px-3 py-2 text-center">
-                <span className="text-[10px] text-blue-100 block font-medium">Nominal Terkunci Otomatis:</span>
+                <span className="text-[10px] text-blue-100 block font-medium">Total Tagihan:</span>
                 <span className="text-base font-black tracking-tight text-white block">
                   Rp {order.total.toLocaleString('id-ID')}
                 </span>
@@ -503,10 +503,10 @@ export default function OrderTrackingPage() {
               </button>
             </div>
 
-            {/* Petunjuk Interaktif */}
+            {/* Panduan Pembayaran */}
             <div className="text-left text-xs bg-blue-50/70 dark:bg-slate-800/60 p-3.5 rounded-2xl border border-blue-200/80 dark:border-slate-700 space-y-2 text-slate-700 dark:text-slate-300">
               <div className="flex items-center gap-1.5 text-blue-900 dark:text-blue-200 font-bold text-xs uppercase tracking-wide">
-                <span>⚡ Cara Bayar Bebas Ribet:</span>
+                <span>Panduan Pembayaran:</span>
               </div>
               <ul className="text-[11px] space-y-1.5 text-slate-600 dark:text-slate-300 list-disc list-inside">
                 <li>
@@ -516,10 +516,10 @@ export default function OrderTrackingPage() {
                   Pilih menu <strong>Pindai / Scan QRIS</strong>, lalu arahkan kamera ke barcode di atas (atau unggah dari galeri jika di HP yang sama).
                 </li>
                 <li>
-                  Nominal <strong className="text-blue-600 dark:text-blue-400">Rp {order.total.toLocaleString('id-ID')}</strong> akan <strong>langsung muncul otomatis</strong> di layar tanpa perlu Anda ketik!
+                  Nominal <strong className="text-blue-600 dark:text-blue-400">Rp {order.total.toLocaleString('id-ID')}</strong> langsung terisi pas tanpa perlu diketik manual.
                 </li>
                 <li>
-                  Periksa penerima <strong>Hrfood.id</strong> lalu klik <strong>Bayar</strong>.
+                  Pastikan nama penerima <strong>Hrfood.id</strong> lalu klik <strong>Bayar</strong>.
                 </li>
               </ul>
             </div>

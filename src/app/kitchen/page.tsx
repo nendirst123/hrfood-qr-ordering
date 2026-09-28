@@ -515,7 +515,7 @@ export default function KitchenDashboardPage() {
             }`}
           >
             <Bike className="w-3 h-3 text-purple-500 dark:text-purple-300" />
-            <span>🛵 Delivery</span>
+            <span>Delivery</span>
             {deliveryCount > 0 && (
               <span className="px-1.5 py-0.2 rounded-full bg-black/20 text-[10px] text-purple-200">
                 {deliveryCount}
@@ -532,7 +532,7 @@ export default function KitchenDashboardPage() {
             }`}
           >
             <Package className="w-3 h-3 text-emerald-500 dark:text-emerald-300" />
-            <span>🛍️ Bungkus</span>
+            <span>Bungkus</span>
             {takeawayCount > 0 && (
               <span className="px-1.5 py-0.2 rounded-full bg-black/20 text-[10px] text-emerald-200">
                 {takeawayCount}
