@@ -1,16 +1,33 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import fs from 'fs';
 import path from 'path';
+import { requireAdmin } from '@/lib/admin-auth';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST(req: Request) {
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024; // 5 MB
+const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+
+export async function POST(req: NextRequest) {
+  // KEAMANAN: upload hanya untuk admin
+  const denied = requireAdmin(req);
+  if (denied) return denied;
+
   try {
     const formData = await req.formData();
     const file = formData.get('file') as File | null;
 
     if (!file) {
       return NextResponse.json({ success: false, error: 'No file provided' }, { status: 400 });
+    }
+
+    // KEAMANAN: batasi ukuran & tipe file
+    if (file.size > MAX_UPLOAD_BYTES) {
+      return NextResponse.json({ success: false, error: 'Ukuran file maksimal 5 MB.' }, { status: 400 });
+    }
+    const mimeType = file.type || 'image/jpeg';
+    if (!ALLOWED_MIME.has(mimeType)) {
+      return NextResponse.json({ success: false, error: 'Tipe file harus gambar (JPG/PNG/WebP/GIF).' }, { status: 400 });
     }
 
     const bytes = await file.arrayBuffer();
@@ -20,7 +37,6 @@ export async function POST(req: Request) {
 
     // Jika di Vercel, encode sebagai Data URL Base64 yang aman dan mandiri
     if (isVercel) {
-      const mimeType = file.type || 'image/jpeg';
       const base64 = buffer.toString('base64');
       const dataUrl = `data:${mimeType};base64,${base64}`;
       return NextResponse.json({ success: true, url: dataUrl });
@@ -32,8 +48,14 @@ export async function POST(req: Request) {
         fs.mkdirSync(uploadsDir, { recursive: true });
       }
 
-      // Sanitasi nama file unik
-      const ext = path.extname(file.name) || '.jpg';
+      // Sanitasi nama file unik — ekstensi diambil dari tipe MIME tervalidasi
+      const extByMime: Record<string, string> = {
+        'image/jpeg': '.jpg',
+        'image/png': '.png',
+        'image/webp': '.webp',
+        'image/gif': '.gif',
+      };
+      const ext = extByMime[mimeType] || '.jpg';
       const cleanName = file.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
       const filename = `menu_${Date.now()}_${cleanName.substring(0, 15)}${ext}`;
       const filePath = path.join(uploadsDir, filename);
@@ -45,7 +67,6 @@ export async function POST(req: Request) {
     } catch (writeErr) {
       // Fallback ke Base64 Data URL jika penulisan disk gagal
       console.warn('Filesystem write failed, falling back to Base64:', writeErr);
-      const mimeType = file.type || 'image/jpeg';
       const base64 = buffer.toString('base64');
       const dataUrl = `data:${mimeType};base64,${base64}`;
       return NextResponse.json({ success: true, url: dataUrl });

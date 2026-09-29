@@ -2,9 +2,14 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/admin-auth';
 import { getAllOrders } from '@/lib/order-store';
 
 export async function GET(request: NextRequest) {
+  // KEAMANAN: laporan omzet hanya untuk admin
+  const denied = requireAdmin(request);
+  if (denied) return denied;
+
   const { searchParams } = new URL(request.url);
   const dateParam = searchParams.get('date');
 

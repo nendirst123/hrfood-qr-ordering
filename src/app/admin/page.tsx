@@ -10,6 +10,7 @@ import { generateCustomerWhatsAppUrl, generateCourierWhatsAppUrl } from '@/lib/w
 import ThermalReceiptModal from '@/components/ThermalReceiptModal';
 import { ThemeToggle } from '@/components/ThemeProvider';
 import { Bell, Volume2, VolumeX, Store, Clock, Power, MapPin, Navigation, Compass, ExternalLink, Phone, MessageCircle } from 'lucide-react';
+import AdminPinGate from '@/components/AdminPinGate';
 
 interface ReportData {
   date: string;
@@ -27,7 +28,7 @@ interface ReportData {
   recentOrders: Order[];
 }
 
-export default function AdminDashboardPage() {
+function AdminDashboardInner() {
   const [activeTab, setActiveTab] = useState<'analytics' | 'catalog' | 'delivery' | 'stock' | 'promo'>('analytics');
 
   // Promo Codes State
@@ -3158,5 +3159,13 @@ export default function AdminDashboardPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function AdminDashboardPage() {
+  return (
+    <AdminPinGate>
+      <AdminDashboardInner />
+    </AdminPinGate>
   );
 }

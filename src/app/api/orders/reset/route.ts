@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resetAllOrders } from '@/lib/order-store';
+import { requireAdmin } from '@/lib/admin-auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
+  // KEAMANAN: reset semua pesanan hanya untuk admin
+  const denied = requireAdmin(request);
+  if (denied) return denied;
+
   try {
     const result = resetAllOrders();
     return NextResponse.json({

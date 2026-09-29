@@ -1,6 +1,8 @@
 import fs from 'fs';
 import path from 'path';
-import { Order, OrderStatus, PaymentMethod, CartItem, OrderType } from '@/types/order';
+import { Order, OrderStatus, PaymentMethod, CartItem, OrderType, MenuItem } from '@/types/order';
+import { getMenuWithAvailability } from './menu-store';
+import { validatePromo } from './promo-store';
 
 const isVercel = process.env.VERCEL === '1';
 const DATA_DIR = isVercel ? '/tmp/data' : path.join(process.cwd(), 'data');
@@ -128,9 +130,63 @@ export function createOrder(payload: {
   ensureDataDir();
   const orders = getAllOrders();
 
-  const subtotal = payload.items.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0);
+  // === KEAMANAN: harga selalu dihitung dari data menu di server ===
+  // unitPrice / basePrice / extraPrice dari client DIABAIKAN agar tidak bisa dimanipulasi.
+  const menuMap = new Map<string, MenuItem>();
+  for (const m of getMenuWithAvailability()) menuMap.set(m.id, m);
+
+  const serverItems: CartItem[] = payload.items.map((item) => {
+    const menuItem = menuMap.get(item.itemId);
+    if (!menuItem) {
+      throw new Error(`Menu "${item.name || item.itemId}" tidak ditemukan.`);
+    }
+    const qty = Number(item.quantity);
+    if (!Number.isInteger(qty) || qty < 1 || qty > 100) {
+      throw new Error(`Jumlah untuk "${menuItem.name}" tidak valid.`);
+    }
+
+    let unitPrice = Number(menuItem.price) || 0;
+    const serverOptions = (item.selectedOptions || []).map((opt) => {
+      const menuOpt = (menuItem.options || []).find((o) => o.name === opt.optionName);
+      const choice = menuOpt?.choices.find((c) => c.label === opt.choiceLabel);
+      if (!menuOpt || !choice) {
+        throw new Error(`Opsi "${opt.choiceLabel}" untuk "${menuItem.name}" tidak valid.`);
+      }
+      const extraPrice = Number(choice.extraPrice) || 0;
+      unitPrice += extraPrice;
+      return {
+        optionName: opt.optionName,
+        choiceLabel: opt.choiceLabel,
+        extraPrice,
+      };
+    });
+
+    return {
+      itemId: menuItem.id,
+      name: menuItem.name,
+      basePrice: Number(menuItem.price) || 0,
+      unitPrice,
+      quantity: qty,
+      selectedOptions: serverOptions,
+      notes: typeof item.notes === 'string' ? item.notes.slice(0, 200) : undefined,
+      image: menuItem.image,
+    };
+  });
+
+  const subtotal = serverItems.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0);
   const tax = 0; // Bebas Pajak Resto (Tanpa PB1)
-  const discountAmount = Math.max(0, payload.discountAmount || 0);
+
+  // === KEAMANAN: diskon dihitung server via validatePromo, bukan dari client ===
+  let discountAmount = 0;
+  const discountCode = payload.discountCode?.trim() || undefined;
+  if (discountCode) {
+    const promoCheck = validatePromo(discountCode, subtotal);
+    if (!promoCheck.valid) {
+      throw new Error(promoCheck.message || 'Kode promo tidak valid.');
+    }
+    discountAmount = promoCheck.discountAmount;
+  }
+
   const deliveryFee = payload.orderType === 'delivery' ? (payload.deliveryFee || 0) : 0;
   const total = Math.max(0, subtotal - discountAmount + deliveryFee);
 
@@ -168,15 +224,17 @@ export function createOrder(payload: {
     deliveryDistanceKm: payload.deliveryDistanceKm,
     deliveryFee,
     pickupTime: payload.pickupTime?.trim(),
-    items: payload.items,
+    items: serverItems,
     subtotal,
     tax: 0,
-    discountCode: payload.discountCode?.trim() || undefined,
+    discountCode,
     discountAmount,
     total,
     paymentMethod: payload.paymentMethod,
-    isPaid: Boolean(payload.isPaid),
-    status: payload.isPaid ? 'cooking' : 'pending_payment',
+    // KEAMANAN: pelanggan tidak bisa menandai pesanannya sendiri sebagai lunas.
+    // Status lunas hanya bisa diubah dari dapur/admin (endpoint terproteksi).
+    isPaid: false,
+    status: 'pending_payment',
     createdAt: now,
     updatedAt: now,
   };

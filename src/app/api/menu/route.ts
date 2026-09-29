@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
+import { requireAdmin } from '@/lib/admin-auth';
 import { 
   getMenuWithAvailability, 
   getAvailabilityMap,
@@ -32,7 +33,9 @@ export async function GET() {
 }
 
 // POST: Tambah menu baru, toggle availability, syncMenuData, ATAU restore menu
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const denied = requireAdmin(req);
+  if (denied) return denied;
   try {
     const body = await req.json();
 
@@ -131,7 +134,9 @@ export async function POST(req: Request) {
 }
 
 // PUT: Edit menu (Harga, Nama, Gambar, Deskripsi, Kategori, isPopular)
-export async function PUT(req: Request) {
+export async function PUT(req: NextRequest) {
+  const denied = requireAdmin(req);
+  if (denied) return denied;
   try {
     const body = await req.json();
     const { id, name, price, description, image, category, isPopular, options, isAvailable } = body;
@@ -168,7 +173,9 @@ export async function PUT(req: Request) {
 }
 
 // DELETE: Hapus menu secara permanen
-export async function DELETE(req: Request) {
+export async function DELETE(req: NextRequest) {
+  const denied = requireAdmin(req);
+  if (denied) return denied;
   try {
     const { searchParams } = new URL(req.url);
     let id = searchParams.get('id');

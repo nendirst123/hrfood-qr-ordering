@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
+import { requireAdmin } from '@/lib/admin-auth';
 import { getStoreConfig, saveStoreConfig } from '@/lib/store-config';
 import { StoreConfig } from '@/types/order';
 
@@ -37,7 +38,9 @@ export async function GET() {
   });
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const denied = requireAdmin(req);
+  if (denied) return denied;
   try {
     const body: Partial<StoreConfig> = await req.json();
     const current = getStoreConfig();

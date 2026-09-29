@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAllOrders, createOrder } from '@/lib/order-store';
 import { getAvailabilityMap, syncMenuAvailability } from '@/lib/menu-store';
+import { requireAdmin, isAdminRequest } from '@/lib/admin-auth';
 import { OrderType, PaymentMethod, CartItem } from '@/types/order';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
+  // KEAMANAN: daftar semua pesanan hanya untuk admin/dapur
+  const denied = requireAdmin(request);
+  if (denied) return denied;
+
   try {
     const { searchParams } = new URL(request.url);
     const table = searchParams.get('table');
@@ -42,10 +47,8 @@ export async function POST(request: NextRequest) {
       deliveryFee = 0,
       pickupTime,
       items,
-      paymentMethod = 'cashier',
-      isPaid,
+      paymentMethod,
       discountCode,
-      discountAmount = 0,
       clientAvailability,
     } = body;
 
@@ -56,8 +59,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Sinkronkan ketersediaan menu dari client jika ada (mengatasi stateless serverless microVM)
-    if (clientAvailability && typeof clientAvailability === 'object') {
+    // KEAMANAN: hanya metode pembayaran yang dikenal yang diterima
+    const safePaymentMethod: PaymentMethod = paymentMethod === 'qris' ? 'qris' : 'cashier';
+    // KEAMANAN: hanya tipe pesanan yang dikenal yang diterima
+    const safeOrderType: OrderType =
+      orderType === 'delivery' || orderType === 'takeaway' ? orderType : 'dine_in';
+
+    // KEAMANAN: sinkronisasi stok dari client hanya diterima dari admin/dapur.
+    // Pelanggan tidak boleh mengubah status ketersediaan menu.
+    if (isAdminRequest(request) && clientAvailability && typeof clientAvailability === 'object') {
       syncMenuAvailability(clientAvailability);
     }
 
@@ -107,7 +117,7 @@ export async function POST(request: NextRequest) {
     }
 
     const newOrder = createOrder({
-      orderType,
+      orderType: safeOrderType,
       tableNumber,
       customerName,
       customerPhone,
@@ -119,10 +129,10 @@ export async function POST(request: NextRequest) {
       deliveryFee: Number(deliveryFee) || 0,
       pickupTime,
       items,
-      paymentMethod,
-      isPaid,
+      paymentMethod: safePaymentMethod,
+      // isPaid & discountAmount dari client DIABAIKAN (keamanan):
+      // lunas hanya via dapur/admin, diskon dihitung server dari discountCode.
       discountCode,
-      discountAmount: Number(discountAmount) || 0,
     });
 
     return NextResponse.json({ success: true, data: newOrder }, { status: 201 });

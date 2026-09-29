@@ -36,8 +36,9 @@ import { playNewOrderChime, startOrderRinging, stopOrderRinging, isOrderRinging 
 import { generateCustomerWhatsAppUrl, generateCourierWhatsAppUrl } from '@/lib/whatsapp-helper';
 import ThermalReceiptModal from '@/components/ThermalReceiptModal';
 import { ThemeToggle } from '@/components/ThemeProvider';
+import AdminPinGate from '@/components/AdminPinGate';
 
-export default function KitchenDashboardPage() {
+function KitchenDashboardInner() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [filterStatus, setFilterStatus] = useState<string>('active');
   const [dateFilter, setDateFilter] = useState<string>('today'); // 'today' | 'yesterday' | 'all' | 'custom'
@@ -1093,5 +1094,13 @@ export default function KitchenDashboardPage() {
         onClose={() => setPrintingOrder(null)}
       />
     </div>
+  );
+}
+
+export default function KitchenDashboardPage() {
+  return (
+    <AdminPinGate>
+      <KitchenDashboardInner />
+    </AdminPinGate>
   );
 }

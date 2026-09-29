@@ -1,12 +1,18 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
+import { requireAdmin, isAdminRequest } from '@/lib/admin-auth';
 import { getAllPromos, upsertPromo, deletePromo, validatePromo } from '@/lib/promo-store';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const showAll = searchParams.get('all') === '1';
+  // KEAMANAN: daftar semua kupon (termasuk nonaktif) hanya untuk admin
+  if (showAll) {
+    const denied = requireAdmin(req);
+    if (denied) return denied;
+  }
 
   const all = getAllPromos();
   const result = showAll ? all : all.filter(p => p.isActive);
@@ -14,16 +20,20 @@ export async function GET(req: Request) {
   return NextResponse.json({ success: true, data: result });
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
-    // 1. Validasi Kupon di Checkout
+    // 1. Validasi Kupon di Checkout (publik — dipakai halaman pemesanan)
     if (body.action === 'validate') {
       const { code, subtotal } = body;
       const res = validatePromo(code, Number(subtotal) || 0);
       return NextResponse.json({ success: true, ...res });
     }
+
+    // 2-3. Kelola kupon hanya untuk admin
+    const denied = requireAdmin(req);
+    if (denied) return denied;
 
     // 2. Toggle Status Aktif Kupon
     if (body.action === 'toggle' && body.id) {
@@ -60,7 +70,9 @@ export async function POST(req: Request) {
   }
 }
 
-export async function DELETE(req: Request) {
+export async function DELETE(req: NextRequest) {
+  const denied = requireAdmin(req);
+  if (denied) return denied;
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
