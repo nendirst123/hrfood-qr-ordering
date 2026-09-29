@@ -122,6 +122,12 @@ export async function getMenuWithAvailability(): Promise<MenuItem[]> {
       currentItem.isAvailable = true;
     }
 
+    // STOK OTOMATIS: stok 0 (atau negatif) memaksa status habis,
+    // tanpa menimpa saklar manual — saat stok diisi lagi, status manual berlaku lagi.
+    if (typeof currentItem.stock === 'number' && currentItem.stock <= 0) {
+      currentItem.isAvailable = false;
+    }
+
     return currentItem;
   });
 
@@ -130,9 +136,13 @@ export async function getMenuWithAvailability(): Promise<MenuItem[]> {
     if (!deletedIds.has(customItem.id) && !seenIds.has(customItem.id)) {
       seenIds.add(customItem.id);
       const availEntry = availabilityMap[customItem.id];
+      let avail = allSoldOut ? false : (availEntry !== undefined ? availEntry.isAvailable : customItem.isAvailable !== false);
+      if (typeof customItem.stock === 'number' && customItem.stock <= 0) {
+        avail = false;
+      }
       const itemWithAvail: MenuItem = {
         ...customItem,
-        isAvailable: allSoldOut ? false : (availEntry !== undefined ? availEntry.isAvailable : customItem.isAvailable !== false),
+        isAvailable: avail,
         updatedAt: availEntry?.updatedAt ? new Date(availEntry.updatedAt).toISOString() : customItem.updatedAt,
       };
       mergedItems.push(itemWithAvail);
@@ -306,6 +316,90 @@ export async function syncMenuAvailability(
   }
 
   return currentMap;
+}
+
+// ----------------------------------------------------
+// Stok Otomatis: kurangi saat order dibuat, kembalikan saat order dibatalkan
+// ----------------------------------------------------
+
+export type StockLine = { itemId: string; quantity: number };
+
+/**
+ * Coba kurangi stok untuk beberapa baris order.
+ * Hanya item yang punya `stock` berupa angka yang dilacak (undefined = tanpa batas).
+ * Mengembalikan { ok:false, insufficient:[nama...] } bila ada stok yang kurang —
+ * dalam hal ini TIDAK ADA stok yang dikurangi (all-or-nothing).
+ */
+export async function tryDecrementStock(
+  lines: StockLine[]
+): Promise<{ ok: boolean; insufficient: string[] }> {
+  const items = await getMenuWithAvailability();
+  const byId = new Map(items.map((i) => [i.id, i]));
+
+  // Agregasi qty per item (satu order bisa berisi item yang sama 2x)
+  const totals = new Map<string, number>();
+  for (const l of lines) {
+    if (!l.itemId) continue;
+    totals.set(l.itemId, (totals.get(l.itemId) || 0) + Math.max(0, Math.floor(Number(l.quantity) || 0)));
+  }
+
+  const insufficient: string[] = [];
+  for (const [id, qty] of totals) {
+    const item = byId.get(id);
+    if (item && typeof item.stock === 'number' && item.stock < qty) {
+      insufficient.push(`${item.name} (sisa ${item.stock})`);
+    }
+  }
+  if (insufficient.length > 0) {
+    return { ok: false, insufficient };
+  }
+
+  // Kurangi — tulis hanya field `stock` ke overrides agar tidak mengganggu
+  // field lain (mis. status availability manual).
+  const overrides = await getMenuOverrides();
+  let changed = false;
+  for (const [id, qty] of totals) {
+    const item = byId.get(id);
+    if (item && typeof item.stock === 'number' && qty > 0) {
+      const prev = overrides[id] || {};
+      const prevStock = typeof prev.stock === 'number' ? prev.stock : item.stock;
+      overrides[id] = { ...prev, id, stock: Math.max(0, prevStock - qty) } as MenuItem;
+      changed = true;
+    }
+  }
+  if (changed) {
+    await saveMenuOverrides(overrides);
+  }
+  return { ok: true, insufficient: [] };
+}
+
+/**
+ * Kembalikan stok saat order dibatalkan.
+ */
+export async function restoreStock(lines: StockLine[]): Promise<void> {
+  const items = await getMenuWithAvailability();
+  const byId = new Map(items.map((i) => [i.id, i]));
+
+  const totals = new Map<string, number>();
+  for (const l of lines) {
+    if (!l.itemId) continue;
+    totals.set(l.itemId, (totals.get(l.itemId) || 0) + Math.max(0, Math.floor(Number(l.quantity) || 0)));
+  }
+
+  const overrides = await getMenuOverrides();
+  let changed = false;
+  for (const [id, qty] of totals) {
+    const item = byId.get(id);
+    if (item && typeof item.stock === 'number' && qty > 0) {
+      const prev = overrides[id] || {};
+      const prevStock = typeof prev.stock === 'number' ? prev.stock : item.stock;
+      overrides[id] = { ...prev, id, stock: prevStock + qty } as MenuItem;
+      changed = true;
+    }
+  }
+  if (changed) {
+    await saveMenuOverrides(overrides);
+  }
 }
 
 // 7. Sinkronisasi Komprehensif Perubahan Menu

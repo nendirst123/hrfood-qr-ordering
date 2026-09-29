@@ -29,7 +29,7 @@ interface ReportData {
 }
 
 function AdminDashboardInner() {
-  const [activeTab, setActiveTab] = useState<'analytics' | 'catalog' | 'delivery' | 'stock' | 'promo'>('analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'catalog' | 'delivery' | 'stock' | 'promo' | 'notif'>('analytics');
 
   // Promo Codes State
   const [promos, setPromos] = useState<PromoCode[]>([]);
@@ -131,6 +131,18 @@ function AdminDashboardInner() {
   // Saklar Stok Filter & Search State
   const [stockSearch, setStockSearch] = useState('');
   const [stockFilter, setStockFilter] = useState<'all' | 'available' | 'sold_out'>('all');
+
+  // Notifikasi WA otomatis (Fonnte)
+  const [waEnabled, setWaEnabled] = useState(false);
+  const [waToken, setWaToken] = useState('');
+  const [waTokenSet, setWaTokenSet] = useState(false);
+  const [waTokenHint, setWaTokenHint] = useState('');
+  const [waEvents, setWaEvents] = useState({ order_received: true, cooking: true, ready: true, completed: false });
+  const [waSaving, setWaSaving] = useState(false);
+  const [waLoaded, setWaLoaded] = useState(false);
+  const [waTestPhone, setWaTestPhone] = useState('');
+  const [waTestStatus, setWaTestStatus] = useState('');
+  const [waSaveMsg, setWaSaveMsg] = useState('');
 
   // Helper LocalStorage untuk Ketersediaan Menu (Self-Healing Persistence)
   const getLocalAvailabilityMap = (): Record<string, { isAvailable: boolean; updatedAt: number }> => {
@@ -766,9 +778,111 @@ function AdminDashboardInner() {
     }
   };
 
-  // Konfirmasi Pembayaran Kasir
-  const handleConfirmPayment = async (orderId: string, paymentMethod: 'cash' | 'qris') => {
+  // Atur jumlah stok menu (null = tanpa batas/tidak dilacak)
+  const handleSetStock = async (item: MenuItem, stock: number | null) => {
+    const prevStock = item.stock;
+    const prevAvail = item.isAvailable;
+    setUpdatingId(item.id);
+    // Optimistic: stok 0 langsung tampil habis
+    setMenuItems(prev => prev.map(m => m.id === item.id
+      ? { ...m, stock: stock === null ? undefined : stock, isAvailable: stock === 0 ? false : m.isAvailable }
+      : m));
     try {
+      const res = await fetch('/api/menu', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: item.id, stock }),
+      });
+      const data = await res.json();
+      if (data.success && data.data) {
+        setMenuItems(prev => prev.map(m => m.id === item.id
+          ? { ...m, stock: data.data.stock ?? undefined, isAvailable: data.data.isAvailable }
+          : m));
+      } else {
+        throw new Error(data.error || 'gagal');
+      }
+    } catch (err) {
+      console.error('Failed setting stock:', err);
+      setMenuItems(prev => prev.map(m => m.id === item.id ? { ...m, stock: prevStock, isAvailable: prevAvail } : m));
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  // ---- Notifikasi WA: ambil & simpan pengaturan ----
+  const fetchWaSettings = async () => {
+    try {
+      const res = await fetch('/api/wa-settings');
+      const data = await res.json();
+      if (data.success) {
+        setWaEnabled(!!data.data.enabled);
+        setWaTokenSet(!!data.data.tokenSet);
+        setWaTokenHint(data.data.tokenHint || '');
+        if (data.data.events) setWaEvents(data.data.events);
+      }
+    } catch (err) {
+      console.error('Failed fetching WA settings:', err);
+    } finally {
+      setWaLoaded(true);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'notif' && !waLoaded) fetchWaSettings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  const handleSaveWaSettings = async () => {
+    setWaSaving(true);
+    setWaSaveMsg('');
+    try {
+      const res = await fetch('/api/wa-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          enabled: waEnabled,
+          token: waToken.trim() ? waToken.trim() : undefined,
+          events: waEvents,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setWaToken('');
+        setWaTokenSet(!!data.data.tokenSet);
+        setWaEnabled(!!data.data.enabled);
+        if (data.data.events) setWaEvents(data.data.events);
+        setWaSaveMsg('✅ Pengaturan tersimpan.');
+      } else {
+        setWaSaveMsg('❌ ' + (data.error || 'Gagal menyimpan.'));
+      }
+    } catch (err) {
+      setWaSaveMsg('❌ Gagal menyimpan.');
+    } finally {
+      setWaSaving(false);
+    }
+  };
+
+  const handleTestWa = async () => {
+    if (!waTestPhone.trim()) {
+      setWaTestStatus('Isi nomor WA tujuan dulu ya.');
+      return;
+    }
+    setWaTestStatus('⏳ Mengirim pesan tes...');
+    try {
+      const res = await fetch('/api/wa-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ testPhone: waTestPhone.trim() }),
+      });
+      const data = await res.json();
+      setWaTestStatus(data.success ? '✅ Pesan tes terkirim! Cek HP-nya.' : '❌ ' + (data.error || 'Gagal.'));
+    } catch (err) {
+      setWaTestStatus('❌ Gagal mengirim.');
+    }
+  };
+
+  // Konfirmasi Pembayaran Kasir
+  const handleConfirmPayment = async (orderId: string, paymentMethod: 'cash' | 'qris') => {    try {
       const res = await fetch(`/api/orders/${orderId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -1408,7 +1522,31 @@ function AdminDashboardInner() {
                 </span>
               )}
             </button>
+
+            <button
+              onClick={() => setActiveTab('notif')}
+              className={`flex items-center gap-1.5 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl font-bold text-xs transition shadow-sm flex-shrink-0 relative ${
+                activeTab === 'notif'
+                  ? 'bg-emerald-600 text-white shadow-emerald-900/30'
+                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-750 border border-slate-200 dark:border-transparent'
+              }`}
+            >
+              <span>💬</span>
+              <span>Notifikasi WA</span>
+              {waLoaded && waEnabled && waTokenSet && (
+                <span className="bg-emerald-400 text-slate-950 text-[10px] font-black px-1.5 py-0.2 rounded-full ml-1">
+                  ON
+                </span>
+              )}
+            </button>
           </div>
+
+          <a
+            href="/pos"
+            className="bg-slate-900 dark:bg-white dark:text-slate-900 text-white font-black px-4 py-2 rounded-xl text-xs shadow-lg transition flex items-center justify-center gap-1.5 flex-shrink-0 hover:opacity-90"
+          >
+            <span>🧾</span> Mode Kasir
+          </a>
 
           {activeTab === 'catalog' && (
             <button
@@ -2223,12 +2361,176 @@ function AdminDashboardInner() {
                             {isUpdating ? '...' : isAvailable ? 'Tandai Habis' : 'Tersedia'}
                           </button>
                         </div>
+
+                        {/* Editor Stok Otomatis */}
+                        <div className="mt-2 pt-2 border-t border-slate-200 dark:border-slate-700/60 flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                            Stok
+                          </span>
+                          {typeof item.stock === 'number' ? (
+                            <div className="flex items-center gap-1">
+                              <button
+                                disabled={isUpdating}
+                                onClick={() => handleSetStock(item, Math.max(0, item.stock! - 1))}
+                                className="w-6 h-6 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 text-sm font-black transition disabled:opacity-50"
+                              >
+                                −
+                              </button>
+                              <span className={`min-w-[2rem] text-center text-xs font-black ${item.stock === 0 ? 'text-red-600' : item.stock <= 5 ? 'text-amber-600' : 'text-slate-800 dark:text-slate-100'}`}>
+                                {item.stock}
+                              </span>
+                              <button
+                                disabled={isUpdating}
+                                onClick={() => handleSetStock(item, item.stock! + 1)}
+                                className="w-6 h-6 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 text-sm font-black transition disabled:opacity-50"
+                              >
+                                +
+                              </button>
+                              <button
+                                disabled={isUpdating}
+                                onClick={() => handleSetStock(item, null)}
+                                title="Tanpa batas (tidak dilacak)"
+                                className="ml-1 px-1.5 h-6 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-500 dark:text-slate-300 text-[10px] font-bold transition disabled:opacity-50"
+                              >
+                                ∞
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              disabled={isUpdating}
+                              onClick={() => handleSetStock(item, 20)}
+                              className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 text-[11px] font-bold transition disabled:opacity-50"
+                            >
+                              ∞ tanpa batas — ketuk untuk atur
+                            </button>
+                          )}
+                        </div>
+                        {typeof item.stock === 'number' && (
+                          <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+                            Berkurang otomatis tiap ada order{isAvailable === false && item.stock === 0 ? ' • habis karena stok 0' : ''}.
+                          </p>
+                        )}
                       </div>
                     );
                   })}
                 </div>
               );
             })()}
+          </div>
+        )}
+
+        {/* TAB: NOTIFIKASI WHATSAPP OTOMATIS */}
+        {activeTab === 'notif' && (
+          <div className="space-y-6">
+            <div className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6 shadow-sm dark:shadow-xl space-y-5 transition-colors">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+                <div>
+                  <h2 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+                    <span>💬</span> Notifikasi WhatsApp Otomatis
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Kirim kabar otomatis ke HP pelanggan: pesanan diterima, lagi dimasak, siap/diantar.
+                  </p>
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                    {waEnabled ? 'Aktif' : 'Mati'}
+                  </span>
+                  <button
+                    onClick={() => setWaEnabled(!waEnabled)}
+                    className={`w-11 h-6 rounded-full transition relative ${waEnabled ? 'bg-emerald-600' : 'bg-slate-300 dark:bg-slate-700'}`}
+                  >
+                    <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${waEnabled ? 'left-[22px]' : 'left-0.5'}`} />
+                  </button>
+                </label>
+              </div>
+
+              {/* Cara mendapatkan token */}
+              <div className="p-3.5 bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800/60 rounded-xl text-xs text-sky-900 dark:text-sky-200 space-y-1.5">
+                <p className="font-black">📲 Cara mengaktifkan (sekali saja):</p>
+                <ol className="list-decimal list-inside space-y-1 text-sky-800 dark:text-sky-300">
+                  <li>Buka <strong>fonnte.com</strong> → daftar & hubungkan nomor WA toko (ada panduan QR di sana).</li>
+                  <li>Di dashboard Fonnte, salin <strong>token</strong> pada menu device.</li>
+                  <li>Tempel token di bawah, simpan, lalu kirim pesan tes.</li>
+                </ol>
+                <p className="text-sky-700 dark:text-sky-400">Catatan: Fonnte berbayar ringan (puluhan ribu/bulan). Tanpa token, tombol di bawah tidak berfungsi.</p>
+              </div>
+
+              {/* Token */}
+              <div>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                  Token Fonnte {waTokenSet && <span className="font-normal text-slate-500">(sudah terpasang {waTokenHint} — isi lagi hanya jika mau ganti)</span>}
+                </label>
+                <input
+                  type="password"
+                  value={waToken}
+                  onChange={(e) => setWaToken(e.target.value)}
+                  placeholder={waTokenSet ? '•••••••• (kosongkan jika tidak ganti)' : 'Tempel token Fonnte di sini'}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white"
+                />
+              </div>
+
+              {/* Pilihan event */}
+              <div>
+                <p className="text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">Kirim notifikasi saat:</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {([
+                    { k: 'order_received', label: '🧾 Pesanan diterima', desc: 'Langsung setelah pelanggan checkout' },
+                    { k: 'cooking', label: '👨‍🍳 Mulai dimasak', desc: 'Saat dapur ubah status ke Dimasak' },
+                    { k: 'ready', label: '🎉 Siap / diantar', desc: 'Siap diambil, siap saji, atau on delivery' },
+                    { k: 'completed', label: '🙏 Selesai', desc: 'Ucapan terima kasih setelah selesai' },
+                  ] as const).map((ev) => (
+                    <label key={ev.k} className="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={!!waEvents[ev.k]}
+                        onChange={(e) => setWaEvents({ ...waEvents, [ev.k]: e.target.checked })}
+                        className="mt-0.5 w-4 h-4 accent-emerald-600"
+                      />
+                      <span>
+                        <span className="block text-xs font-bold text-slate-800 dark:text-slate-100">{ev.label}</span>
+                        <span className="block text-[11px] text-slate-500 dark:text-slate-400">{ev.desc}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleSaveWaSettings}
+                  disabled={waSaving}
+                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-black transition shadow"
+                >
+                  {waSaving ? 'Menyimpan...' : '💾 Simpan Pengaturan'}
+                </button>
+                {waSaveMsg && <span className="text-xs font-bold text-slate-600 dark:text-slate-300">{waSaveMsg}</span>}
+              </div>
+
+              {/* Tes kirim */}
+              <div className="border-t border-slate-200 dark:border-slate-800 pt-4">
+                <p className="text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">🧪 Tes kirim pesan</p>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    value={waTestPhone}
+                    onChange={(e) => setWaTestPhone(e.target.value)}
+                    placeholder="Nomor WA, mis. 08123456789"
+                    inputMode="tel"
+                    className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white"
+                  />
+                  <button
+                    onClick={handleTestWa}
+                    className="px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-white dark:text-slate-900 text-white text-xs font-black transition hover:opacity-90"
+                  >
+                    Kirim Tes
+                  </button>
+                </div>
+                {waTestStatus && <p className="text-xs font-bold text-slate-600 dark:text-slate-300 mt-2">{waTestStatus}</p>}
+                <p className="text-[11px] text-slate-400 mt-2">
+                  Notifikasi hanya terkirim ke pelanggan yang mengisi nomor WA saat pesan (delivery/takeaway selalu wajib isi).
+                </p>
+              </div>
+            </div>
           </div>
         )}
 

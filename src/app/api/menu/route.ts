@@ -139,7 +139,7 @@ export async function PUT(req: NextRequest) {
   if (denied) return denied;
   try {
     const body = await req.json();
-    const { id, name, price, description, image, category, isPopular, options, isAvailable } = body;
+    const { id, name, price, description, image, category, isPopular, options, isAvailable, stock } = body;
 
     if (!id) {
       return NextResponse.json({ success: false, error: 'ID menu wajib disertakan' }, { status: 400 });
@@ -154,6 +154,18 @@ export async function PUT(req: NextRequest) {
     if (isPopular !== undefined) updates.isPopular = !!isPopular;
     if (isAvailable !== undefined) updates.isAvailable = !!isAvailable;
     if (options !== undefined) updates.options = options;
+    // Stok: angka >= 0, atau null untuk "tanpa batas" (tidak dilacak)
+    if (stock !== undefined) {
+      if (stock === null || stock === '') {
+        updates.stock = null;
+      } else {
+        const n = Math.floor(Number(stock));
+        if (Number.isNaN(n) || n < 0 || n > 1000000) {
+          return NextResponse.json({ success: false, error: 'Stok harus angka 0 atau lebih.' }, { status: 400 });
+        }
+        updates.stock = n;
+      }
+    }
 
     const updated = await updateMenuItem(id, updates);
     if (!updated) {

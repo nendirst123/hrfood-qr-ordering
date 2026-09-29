@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAllOrders, createOrder } from '@/lib/order-store';
-import { getAvailabilityMap, syncMenuAvailability } from '@/lib/menu-store';
+import { getAvailabilityMap, getMenuWithAvailability, syncMenuAvailability } from '@/lib/menu-store';
 import { requireAdmin, isAdminRequest } from '@/lib/admin-auth';
 import { getStoreConfig, isStoreOpenNow } from '@/lib/store-config';
+import { notifyOrderEvent } from '@/lib/wa-notify';
 import { OrderType, PaymentMethod, CartItem } from '@/types/order';
 
 export const dynamic = 'force-dynamic';
@@ -60,6 +61,7 @@ export async function POST(request: NextRequest) {
       paymentMethod,
       discountCode,
       clientAvailability,
+      source,
     } = body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -81,8 +83,10 @@ export async function POST(request: NextRequest) {
       await syncMenuAvailability(clientAvailability);
     }
 
-    // Validasi menu yang sedang habis stok
+    // Validasi menu yang sedang habis stok + stok tidak cukup (dari data server)
     const availabilityMap = await getAvailabilityMap();
+    const menuList = await getMenuWithAvailability();
+    const menuById = new Map(menuList.map((m) => [m.id, m]));
     const soldOutCartItems = items.filter((cartItem: CartItem) => {
       const entry = availabilityMap[cartItem.itemId];
       return entry && entry.isAvailable === false;
@@ -92,6 +96,25 @@ export async function POST(request: NextRequest) {
       const names = soldOutCartItems.map((i: CartItem) => i.name).join(', ');
       return NextResponse.json(
         { success: false, error: `Maaf, menu "${names}" sedang habis stok. Silakan periksa kembali keranjang Anda.` },
+        { status: 400 }
+      );
+    }
+
+    // Cek stok otomatis lebih awal agar pesan error jelas (createOrder juga cek lagi)
+    const qtyById = new Map<string, number>();
+    for (const ci of items as CartItem[]) {
+      qtyById.set(ci.itemId, (qtyById.get(ci.itemId) || 0) + (Number(ci.quantity) || 0));
+    }
+    const insufficient: string[] = [];
+    for (const [id, qty] of qtyById) {
+      const m = menuById.get(id);
+      if (m && typeof m.stock === 'number' && m.stock < qty) {
+        insufficient.push(`${m.name} (sisa ${m.stock})`);
+      }
+    }
+    if (insufficient.length > 0) {
+      return NextResponse.json(
+        { success: false, error: `Stok tidak cukup: ${insufficient.join(', ')}. Silakan kurangi jumlahnya.` },
         { status: 400 }
       );
     }
@@ -143,7 +166,12 @@ export async function POST(request: NextRequest) {
       // isPaid & discountAmount dari client DIABAIKAN (keamanan):
       // lunas hanya via dapur/admin, diskon dihitung server dari discountCode.
       discountCode,
+      // Sumber order: hanya admin/kasir yang boleh menandai 'pos'.
+      source: isAdminRequest(request) && source === 'pos' ? 'pos' : 'qr',
     });
+
+    // NOTIF WA: kabari pelanggan bahwa pesanan diterima (async, tidak menghambat respons)
+    notifyOrderEvent(newOrder, 'order_received').catch(() => {});
 
     return NextResponse.json({ success: true, data: newOrder }, { status: 201 });
   } catch (error: any) {

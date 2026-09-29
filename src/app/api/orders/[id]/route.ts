@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getOrderById, updateOrderStatus } from '@/lib/order-store';
 import { requireAdmin } from '@/lib/admin-auth';
+import { notifyOrderEvent, statusToWaEvent } from '@/lib/wa-notify';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,6 +40,12 @@ export async function PATCH(
     const updated = await updateOrderStatus(params.id, status, isPaid);
     if (!updated) {
       return NextResponse.json({ success: false, error: 'Pesanan tidak ditemukan' }, { status: 404 });
+    }
+
+    // NOTIF WA: kabari pelanggan saat status berubah (async, tidak menghambat respons)
+    const waEvent = statusToWaEvent(status);
+    if (waEvent) {
+      notifyOrderEvent(updated, waEvent).catch(() => {});
     }
 
     return NextResponse.json({ success: true, data: updated });

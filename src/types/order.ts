@@ -21,6 +21,8 @@ export interface MenuItem {
   image: string;
   isPopular?: boolean;
   isAvailable?: boolean;
+  /** Stok tersisa. undefined/null = tanpa batas (tidak dilacak). 0 = habis otomatis. */
+  stock?: number | null;
   updatedAt?: string | number;
   options?: MenuItemOption[];
 }
@@ -85,6 +87,8 @@ export interface Order {
   paymentMethod: PaymentMethod;
   isPaid: boolean;
   status: OrderStatus;
+  /** Sumber order: 'qr' (pelanggan via QR) atau 'pos' (kasir). Default 'qr'. */
+  source?: 'qr' | 'pos';
   createdAt: string; // ISO String
   updatedAt: string;
 }

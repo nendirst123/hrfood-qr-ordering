@@ -1,6 +1,6 @@
 import { kvGet, kvSet } from './db';
 import { Order, OrderStatus, PaymentMethod, CartItem, OrderType, MenuItem } from '@/types/order';
-import { getMenuWithAvailability } from './menu-store';
+import { getMenuWithAvailability, tryDecrementStock, restoreStock } from './menu-store';
 import { validatePromo } from './promo-store';
 import { getDeliverySettings } from './delivery-store';
 
@@ -79,6 +79,7 @@ export async function createOrder(payload: {
   isPaid?: boolean;
   discountCode?: string;
   discountAmount?: number;
+  source?: 'qr' | 'pos';
 }): Promise<Order> {
   const orders = await loadOrders();
 
@@ -127,6 +128,14 @@ export async function createOrder(payload: {
 
   const subtotal = serverItems.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0);
   const tax = 0; // Bebas Pajak Resto (Tanpa PB1)
+
+  // === STOK OTOMATIS: kurangi stok menu yang dilacak; tolak bila kurang ===
+  const dec = await tryDecrementStock(
+    serverItems.map((i) => ({ itemId: i.itemId, quantity: i.quantity }))
+  );
+  if (!dec.ok) {
+    throw new Error(`Stok tidak cukup: ${dec.insufficient.join(', ')}. Silakan kurangi jumlahnya.`);
+  }
 
   // === KEAMANAN: diskon dihitung server via validatePromo, bukan dari client ===
   let discountAmount = 0;
@@ -230,6 +239,7 @@ export async function createOrder(payload: {
     // Status lunas hanya bisa diubah dari dapur/admin (endpoint terproteksi).
     isPaid: false,
     status: 'pending_payment',
+    source: payload.source === 'pos' ? 'pos' : 'qr',
     createdAt: now,
     updatedAt: now,
   };
@@ -244,6 +254,7 @@ export async function updateOrderStatus(id: string, status: OrderStatus, isPaid?
   const index = orders.findIndex(o => o.id === id);
   if (index === -1) return null;
 
+  const prevStatus = orders[index].status;
   orders[index].status = status;
   if (typeof isPaid === 'boolean') {
     orders[index].isPaid = isPaid;
@@ -251,6 +262,18 @@ export async function updateOrderStatus(id: string, status: OrderStatus, isPaid?
   orders[index].updatedAt = new Date().toISOString();
 
   await saveOrders(orders);
+
+  // STOK OTOMATIS: kembalikan stok bila order dibatalkan (hanya sekali).
+  if (status === 'cancelled' && prevStatus !== 'cancelled') {
+    try {
+      await restoreStock(
+        (orders[index].items || []).map((i) => ({ itemId: i.itemId, quantity: i.quantity }))
+      );
+    } catch (e) {
+      console.warn('[stock] gagal mengembalikan stok order batal:', e);
+    }
+  }
+
   return orders[index];
 }
 
