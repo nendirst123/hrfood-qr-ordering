@@ -247,24 +247,27 @@ function OrderingAppContent() {
   // Dynamic Menu Availability State
   const [menuList, setMenuList] = useState<MenuItem[]>(MENU_ITEMS);
 
-  // Pulihkan cache ketersediaan menu dari localStorage pada mount awal
+  // Pulihkan cache ketersediaan menu dan kustomisasi menu dari localStorage pada mount awal
   useEffect(() => {
     try {
       const cachedAvail = localStorage.getItem('hrfood_menu_availability_map');
-      if (cachedAvail) {
-        const parsedAvail = JSON.parse(cachedAvail);
-        if (parsedAvail && typeof parsedAvail === 'object') {
-          setMenuList((prev) =>
-            prev.map((m) => {
-              const entry = parsedAvail[m.id];
-              if (entry && typeof entry.isAvailable === 'boolean') {
-                return { ...m, isAvailable: entry.isAvailable };
-              }
-              return m;
-            })
-          );
-        }
-      }
+      const cachedDeleted = localStorage.getItem('hrfood_deleted_menu_ids');
+      const cachedOverrides = localStorage.getItem('hrfood_menu_overrides');
+      const deletedSet = cachedDeleted ? new Set<string>(JSON.parse(cachedDeleted)) : new Set<string>();
+      const overridesMap = cachedOverrides ? JSON.parse(cachedOverrides) : {};
+      const parsedAvail = cachedAvail ? JSON.parse(cachedAvail) : {};
+
+      setMenuList((prev) => {
+        const filtered = prev.filter((m) => !deletedSet.has(m.id));
+        return filtered.map((m) => {
+          let item = overridesMap[m.id] ? { ...m, ...overridesMap[m.id], id: m.id } : { ...m };
+          const entry = parsedAvail[m.id];
+          if (entry && typeof entry.isAvailable === 'boolean') {
+            item.isAvailable = entry.isAvailable;
+          }
+          return item;
+        });
+      });
     } catch (e) {}
   }, []);
 
@@ -275,34 +278,80 @@ function OrderingAppContent() {
         const data = await res.json();
         if (data.success && Array.isArray(data.items)) {
           const localMap = getLocalAvailabilityMap();
+          let localDeleted = new Set<string>();
+          let localOverrides: Record<string, MenuItem> = {};
+
+          try {
+            const rawDel = localStorage.getItem('hrfood_deleted_menu_ids');
+            if (rawDel) localDeleted = new Set(JSON.parse(rawDel));
+            const rawOvr = localStorage.getItem('hrfood_menu_overrides');
+            if (rawOvr) localOverrides = JSON.parse(rawOvr);
+          } catch (e) {}
+
+          // Sinkronkan deleted IDs dari server
+          if (Array.isArray(data.deletedIds)) {
+            data.deletedIds.forEach((id: string) => localDeleted.add(id));
+            try {
+              localStorage.setItem('hrfood_deleted_menu_ids', JSON.stringify(Array.from(localDeleted)));
+            } catch (e) {}
+          }
+
+          // Sinkronkan overrides dari server
+          if (data.overrides && typeof data.overrides === 'object') {
+            Object.assign(localOverrides, data.overrides);
+            try {
+              localStorage.setItem('hrfood_menu_overrides', JSON.stringify(localOverrides));
+            } catch (e) {}
+          }
+
           let needsSync = false;
           const syncPayload: Record<string, { isAvailable: boolean; updatedAt: number }> = {};
 
-          const merged = data.items.map((srvItem: MenuItem) => {
-            const localEntry = localMap[srvItem.id];
+          // Filter out deleted items
+          const nonDeleted = data.items.filter((srvItem: MenuItem) => !localDeleted.has(srvItem.id));
+          const seenIds = new Set<string>();
+
+          const merged = nonDeleted.map((srvItem: MenuItem) => {
+            seenIds.add(srvItem.id);
+            const override = localOverrides[srvItem.id];
+            const baseItem = override ? { ...srvItem, ...override, id: srvItem.id } : srvItem;
+
+            const localEntry = localMap[baseItem.id];
             if (!localEntry) {
-              localMap[srvItem.id] = {
-                isAvailable: srvItem.isAvailable !== false,
-                updatedAt: srvItem.updatedAt ? new Date(srvItem.updatedAt).getTime() : 0,
+              localMap[baseItem.id] = {
+                isAvailable: baseItem.isAvailable !== false,
+                updatedAt: baseItem.updatedAt ? new Date(baseItem.updatedAt).getTime() : 0,
               };
-              return srvItem;
+              return baseItem;
             }
 
-            const srvAvail = srvItem.isAvailable !== false;
-            const srvTime = srvItem.updatedAt ? new Date(srvItem.updatedAt).getTime() : 0;
+            const srvAvail = baseItem.isAvailable !== false;
+            const srvTime = baseItem.updatedAt ? new Date(baseItem.updatedAt).getTime() : 0;
 
             if (localEntry.updatedAt > srvTime) {
               if (localEntry.isAvailable !== srvAvail) {
                 needsSync = true;
-                syncPayload[srvItem.id] = localEntry;
+                syncPayload[baseItem.id] = localEntry;
               }
-              return { ...srvItem, isAvailable: localEntry.isAvailable };
+              return { ...baseItem, isAvailable: localEntry.isAvailable };
             } else {
-              localMap[srvItem.id] = {
+              localMap[baseItem.id] = {
                 isAvailable: srvAvail,
                 updatedAt: srvTime || localEntry.updatedAt,
               };
-              return srvItem;
+              return baseItem;
+            }
+          });
+
+          // Masukkan custom items
+          Object.values(localOverrides).forEach((customItem: MenuItem) => {
+            if (!localDeleted.has(customItem.id) && !seenIds.has(customItem.id)) {
+              seenIds.add(customItem.id);
+              const avail = localMap[customItem.id];
+              merged.push({
+                ...customItem,
+                isAvailable: avail !== undefined ? avail.isAvailable : customItem.isAvailable !== false,
+              });
             }
           });
 

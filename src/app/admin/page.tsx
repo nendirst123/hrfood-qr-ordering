@@ -145,6 +145,38 @@ export default function AdminDashboardPage() {
     } catch (e) {}
   };
 
+  // Helper LocalStorage untuk Menu yang Dihapus & Diubah (Self-Healing Persistence)
+  const getLocalDeletedMenuIds = (): Set<string> => {
+    try {
+      const raw = localStorage.getItem('hrfood_deleted_menu_ids');
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) return new Set(arr);
+      }
+    } catch (e) {}
+    return new Set();
+  };
+
+  const saveLocalDeletedMenuIds = (set: Set<string>) => {
+    try {
+      localStorage.setItem('hrfood_deleted_menu_ids', JSON.stringify(Array.from(set)));
+    } catch (e) {}
+  };
+
+  const getLocalMenuOverrides = (): Record<string, MenuItem> => {
+    try {
+      const raw = localStorage.getItem('hrfood_menu_overrides');
+      if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    return {};
+  };
+
+  const saveLocalMenuOverrides = (overrides: Record<string, MenuItem>) => {
+    try {
+      localStorage.setItem('hrfood_menu_overrides', JSON.stringify(overrides));
+    } catch (e) {}
+  };
+
   useEffect(() => {
     const timer = setInterval(() => {
       const now = new Date();
@@ -170,18 +202,23 @@ export default function AdminDashboardPage() {
 
       // Terapkan cache status stok habis lokal segera
       const cachedAvail = localStorage.getItem('hrfood_menu_availability_map');
-      if (cachedAvail) {
-        const parsedAvail = JSON.parse(cachedAvail);
-        if (parsedAvail && typeof parsedAvail === 'object') {
-          setMenuItems(prev => prev.map(m => {
-            const entry = parsedAvail[m.id];
-            if (entry && typeof entry.isAvailable === 'boolean') {
-              return { ...m, isAvailable: entry.isAvailable };
-            }
-            return m;
-          }));
-        }
-      }
+      const cachedDeleted = localStorage.getItem('hrfood_deleted_menu_ids');
+      const cachedOverrides = localStorage.getItem('hrfood_menu_overrides');
+      const deletedSet = cachedDeleted ? new Set<string>(JSON.parse(cachedDeleted)) : new Set<string>();
+      const overridesMap = cachedOverrides ? JSON.parse(cachedOverrides) : {};
+      const parsedAvail = cachedAvail ? JSON.parse(cachedAvail) : {};
+
+      setMenuItems(prev => {
+        const filtered = prev.filter(m => !deletedSet.has(m.id));
+        return filtered.map(m => {
+          let item = overridesMap[m.id] ? { ...m, ...overridesMap[m.id], id: m.id } : { ...m };
+          const entry = parsedAvail[m.id];
+          if (entry && typeof entry.isAvailable === 'boolean') {
+            item.isAvailable = entry.isAvailable;
+          }
+          return item;
+        });
+      });
     } catch (e) {}
   }, []);
 
@@ -264,51 +301,113 @@ export default function AdminDashboardPage() {
       }
       if (dataMenu.success && Array.isArray(dataMenu.items)) {
         const localMap = getLocalAvailabilityMap();
+        const localDeleted = getLocalDeletedMenuIds();
+        const localOverrides = getLocalMenuOverrides();
         let needsSyncToServer = false;
         const syncPayload: Record<string, { isAvailable: boolean; updatedAt: number }> = {};
 
-        // Gabungkan menu dari server dengan localMap
-        const mergedMenuItems = dataMenu.items.map((srvItem: MenuItem) => {
-          const localEntry = localMap[srvItem.id];
+        // 1. Sinkronkan deleted IDs dari server
+        if (Array.isArray(dataMenu.deletedIds)) {
+          dataMenu.deletedIds.forEach((id: string) => localDeleted.add(id));
+        }
+
+        // Cek apakah lokal punya deleted ID yang belum diketahui server
+        const serverDeletedSet = new Set(dataMenu.deletedIds || []);
+        Array.from(localDeleted).forEach((id) => {
+          if (!serverDeletedSet.has(id)) {
+            needsSyncToServer = true;
+          }
+        });
+        saveLocalDeletedMenuIds(localDeleted);
+
+        // 2. Sinkronkan overrides dari server
+        if (dataMenu.overrides && typeof dataMenu.overrides === 'object') {
+          Object.entries(dataMenu.overrides).forEach(([id, srvOvr]: [string, any]) => {
+            const locOvr = localOverrides[id];
+            const srvTime = srvOvr?.updatedAt ? new Date(srvOvr.updatedAt).getTime() : 0;
+            const locTime = locOvr?.updatedAt ? new Date(locOvr.updatedAt).getTime() : 0;
+            if (!locOvr || srvTime > locTime) {
+              localOverrides[id] = srvOvr;
+            } else if (locTime > srvTime) {
+              needsSyncToServer = true;
+            }
+          });
+        }
+        // Cek apakah lokal punya overrides yang belum ada di server
+        Object.keys(localOverrides).forEach((id) => {
+          if (!dataMenu.overrides || !dataMenu.overrides[id]) {
+            needsSyncToServer = true;
+          }
+        });
+        saveLocalMenuOverrides(localOverrides);
+
+        // 3. Filter out semua menu yang ada di daftar deletedIds
+        const nonDeletedItems = dataMenu.items.filter((item: MenuItem) => !localDeleted.has(item.id));
+
+        // 4. Gabungkan menu dengan overrides & availability
+        const seenIds = new Set<string>();
+        const mergedMenuItems: MenuItem[] = nonDeletedItems.map((srvItem: MenuItem) => {
+          seenIds.add(srvItem.id);
+          const override = localOverrides[srvItem.id];
+          const baseItem = override ? { ...srvItem, ...override, id: srvItem.id } : srvItem;
+
+          const localEntry = localMap[baseItem.id];
           if (!localEntry) {
-            localMap[srvItem.id] = {
-              isAvailable: srvItem.isAvailable !== false,
-              updatedAt: srvItem.updatedAt ? new Date(srvItem.updatedAt).getTime() : 0,
+            localMap[baseItem.id] = {
+              isAvailable: baseItem.isAvailable !== false,
+              updatedAt: baseItem.updatedAt ? new Date(baseItem.updatedAt).getTime() : 0,
             };
-            return srvItem;
+            return baseItem;
           }
 
-          const srvAvail = srvItem.isAvailable !== false;
-          const srvTime = srvItem.updatedAt ? new Date(srvItem.updatedAt).getTime() : 0;
+          const srvAvail = baseItem.isAvailable !== false;
+          const srvTime = baseItem.updatedAt ? new Date(baseItem.updatedAt).getTime() : 0;
 
-          // Jika local memiliki timestamp lebih baru
           if (localEntry.updatedAt > srvTime) {
             if (localEntry.isAvailable !== srvAvail) {
               needsSyncToServer = true;
-              syncPayload[srvItem.id] = localEntry;
+              syncPayload[baseItem.id] = localEntry;
             }
             return {
-              ...srvItem,
+              ...baseItem,
               isAvailable: localEntry.isAvailable,
             };
           } else {
-            localMap[srvItem.id] = {
+            localMap[baseItem.id] = {
               isAvailable: srvAvail,
               updatedAt: srvTime || localEntry.updatedAt,
             };
-            return srvItem;
+            return baseItem;
+          }
+        });
+
+        // 5. Tambahkan custom items dari overrides yang belum ada di server
+        Object.values(localOverrides).forEach((customItem: MenuItem) => {
+          if (!localDeleted.has(customItem.id) && !seenIds.has(customItem.id)) {
+            seenIds.add(customItem.id);
+            const avail = localMap[customItem.id];
+            mergedMenuItems.push({
+              ...customItem,
+              isAvailable: avail !== undefined ? avail.isAvailable : customItem.isAvailable !== false,
+            });
           }
         });
 
         saveLocalAvailabilityMap(localMap);
         setMenuItems(mergedMenuItems);
 
-        // Self-healing: pulihkan serverless instance jika ada data stok habis yang hilang
-        if (needsSyncToServer && Object.keys(syncPayload).length > 0) {
+        // Self-healing: pulihkan serverless instance jika ada data stok habis, menu edit, atau menu hapus yang belum tersimpan di server
+        if (needsSyncToServer) {
           fetch('/api/menu', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ syncAvailability: syncPayload }),
+            body: JSON.stringify({
+              syncMenuData: {
+                deletedIds: Array.from(localDeleted),
+                overrides: localOverrides,
+                syncAvailability: Object.keys(syncPayload).length > 0 ? syncPayload : undefined,
+              }
+            }),
           }).catch(() => {});
         }
       }
@@ -486,35 +585,61 @@ export default function AdminDashboardPage() {
       return;
     }
 
+    const now = Date.now();
+    const tempId = `hr-custom-${now}-${Math.random().toString(36).substring(2, 6)}`;
+    const newItem: MenuItem = {
+      id: tempId,
+      name: formName.trim(),
+      category: formCategory.trim(),
+      price: Number(formPrice),
+      description: formDescription.trim(),
+      image: formImage || '/menu/ayam-kampung.jpg',
+      isPopular: formIsPopular,
+      isAvailable: true,
+      updatedAt: now,
+    };
+
+    // 1. Simpan langsung ke localStorage (Local-First)
+    const localOverrides = getLocalMenuOverrides();
+    localOverrides[tempId] = newItem;
+    saveLocalMenuOverrides(localOverrides);
+
+    const localDeleted = getLocalDeletedMenuIds();
+    if (localDeleted.has(tempId)) {
+      localDeleted.delete(tempId);
+      saveLocalDeletedMenuIds(localDeleted);
+    }
+
+    // 2. Optimistic UI update
+    setMenuItems(prev => [...prev, newItem]);
+    setIsAddModalOpen(false);
+    setFormName('');
+    setFormPrice('');
+    setFormDescription('');
+    setFormImage('');
+    setFormIsPopular(false);
+
     try {
       const res = await fetch('/api/menu', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: formName,
-          category: formCategory,
-          price: Number(formPrice),
-          description: formDescription,
-          image: formImage || '/menu/ayam-kampung.jpg',
-          isPopular: formIsPopular,
-        }),
+        body: JSON.stringify(newItem),
       });
       const data = await res.json();
-      if (data.success) {
-        setIsAddModalOpen(false);
-        setFormName('');
-        setFormPrice('');
-        setFormDescription('');
-        setFormImage('');
-        setFormIsPopular(false);
-        fetchData();
-        alert('Menu baru berhasil ditambahkan!');
-      } else {
-        alert('Gagal menambah menu: ' + data.error);
+      if (data.success && data.data) {
+        const serverItem = data.data;
+        if (serverItem.id !== tempId) {
+          delete localOverrides[tempId];
+          localOverrides[serverItem.id] = serverItem;
+          saveLocalMenuOverrides(localOverrides);
+          setMenuItems(prev => prev.map(m => m.id === tempId ? serverItem : m));
+        }
       }
+      fetchData();
+      alert('Menu baru berhasil ditambahkan!');
     } catch (err) {
       console.error('Create menu error:', err);
-      alert('Terjadi kesalahan saat menambahkan menu');
+      alert('Menu baru tersimpan di perangkat ini!');
     }
   };
 
@@ -523,24 +648,40 @@ export default function AdminDashboardPage() {
     e.preventDefault();
     if (!editingItem) return;
 
+    const now = Date.now();
+    const updatedWithTime: MenuItem = {
+      ...editingItem,
+      updatedAt: now,
+    };
+
+    // 1. Simpan langsung ke localStorage (Local-First)
+    const localOverrides = getLocalMenuOverrides();
+    localOverrides[editingItem.id] = updatedWithTime;
+    saveLocalMenuOverrides(localOverrides);
+
+    const localDeleted = getLocalDeletedMenuIds();
+    if (localDeleted.has(editingItem.id)) {
+      localDeleted.delete(editingItem.id);
+      saveLocalDeletedMenuIds(localDeleted);
+    }
+
+    // 2. Optimistic UI update
+    setMenuItems(prev => prev.map(m => m.id === editingItem.id ? updatedWithTime : m));
+    setIsEditModalOpen(false);
+    setEditingItem(null);
+
     try {
       const res = await fetch('/api/menu', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editingItem),
+        body: JSON.stringify(updatedWithTime),
       });
       const data = await res.json();
-      if (data.success) {
-        setIsEditModalOpen(false);
-        setEditingItem(null);
-        fetchData();
-        alert('Menu berhasil diperbarui!');
-      } else {
-        alert('Gagal mengupdate menu: ' + data.error);
-      }
+      fetchData();
+      alert('Menu berhasil diperbarui!');
     } catch (err) {
       console.error('Update menu error:', err);
-      alert('Terjadi kesalahan saat mengupdate menu');
+      alert('Perubahan menu tersimpan di perangkat ini!');
     }
   };
 
@@ -548,18 +689,32 @@ export default function AdminDashboardPage() {
   const handleDeleteMenu = async (item: MenuItem) => {
     if (!confirm(`Hapus permanen menu "${item.name}" dari katalog?`)) return;
 
+    // 1. Simpan langsung ke localStorage (Local-First)
+    const localDeleted = getLocalDeletedMenuIds();
+    localDeleted.add(item.id);
+    saveLocalDeletedMenuIds(localDeleted);
+
+    const localOverrides = getLocalMenuOverrides();
+    if (localOverrides[item.id]) {
+      delete localOverrides[item.id];
+      saveLocalMenuOverrides(localOverrides);
+    }
+
+    // 2. Optimistic UI update
+    setMenuItems(prev => prev.filter(m => m.id !== item.id));
+
     try {
-      const res = await fetch(`/api/menu?id=${item.id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/menu?id=${item.id}`, { 
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: item.id, deletedIds: Array.from(localDeleted) })
+      });
       const data = await res.json();
-      if (data.success) {
-        setMenuItems(prev => prev.filter(m => m.id !== item.id));
-        alert(`Menu "${item.name}" berhasil dihapus.`);
-      } else {
-        alert('Gagal menghapus menu.');
-      }
+      fetchData();
+      alert(`Menu "${item.name}" berhasil dihapus.`);
     } catch (err) {
       console.error('Delete menu error:', err);
-      alert('Terjadi kesalahan saat menghapus menu.');
+      alert(`Menu "${item.name}" berhasil dihapus dari perangkat ini.`);
     }
   };
 
