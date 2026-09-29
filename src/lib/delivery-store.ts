@@ -8,6 +8,8 @@ const DEFAULT_SETTINGS: DeliverySettings = {
   minOrderAmount: 15000,
   freeDeliveryThreshold: 150000,
   whatsappNumber: '6283838432860',
+  feeMode: 'per_km',
+  perKmRate: 5000,
   zones: [
     {
       id: 'zone-1',
@@ -50,8 +52,11 @@ export async function getDeliverySettings(): Promise<DeliverySettings> {
 }
 
 export async function saveDeliverySettings(settings: DeliverySettings): Promise<DeliverySettings> {
-  await kvSet(SETTINGS_KEY, settings);
-  return settings;
+  // Merge dengan settings lama agar partial update tidak menghapus field lain
+  const current = await getDeliverySettings();
+  const merged = { ...current, ...settings };
+  await kvSet(SETTINGS_KEY, merged);
+  return merged;
 }
 
 export async function updateDeliveryZone(zone: DeliveryZone): Promise<DeliverySettings> {

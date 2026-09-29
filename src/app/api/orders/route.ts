@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAllOrders, createOrder } from '@/lib/order-store';
 import { getAvailabilityMap, syncMenuAvailability } from '@/lib/menu-store';
 import { requireAdmin, isAdminRequest } from '@/lib/admin-auth';
+import { getStoreConfig, isStoreOpenNow } from '@/lib/store-config';
 import { OrderType, PaymentMethod, CartItem } from '@/types/order';
 
 export const dynamic = 'force-dynamic';
@@ -33,6 +34,15 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    // KEAMANAN: tolak order baru saat toko tutup (termasuk jadwal otomatis).
+    const storeConfig = await getStoreConfig();
+    if (!isStoreOpenNow(storeConfig)) {
+      return NextResponse.json(
+        { success: false, error: storeConfig.closedMessage || 'Maaf, toko sedang tutup.' },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
     const {
       orderType = 'dine_in',

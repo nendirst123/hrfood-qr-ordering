@@ -103,11 +103,15 @@ export interface DeliveryCalculationResult {
   isFreeDelivery: boolean;
 }
 
-// Hitung ongkir otomatis berdasarkan jarak KM
+// Hitung ongkir otomatis berdasarkan jarak KM.
+// mode 'per_km': fee = jarak × tarifPerKm (mis. 1,2 km × 5000 = 6000).
+// mode 'per_zone' (legacy): bracket jarak bawaan.
 export function calculateDeliveryFeeFromKm(
   distanceKm: number,
   cartSubtotal: number = 0,
-  freeDeliveryThreshold?: number
+  freeDeliveryThreshold?: number,
+  feeMode?: 'per_zone' | 'per_km',
+  perKmRate?: number
 ): DeliveryCalculationResult {
   // Cek apakah tembus batas gratis ongkir
   const isFreeDelivery = !!(freeDeliveryThreshold && cartSubtotal >= freeDeliveryThreshold);
@@ -117,7 +121,14 @@ export function calculateDeliveryFeeFromKm(
   let estimatedMin = 15;
   let estimatedMax = 25;
 
-  if (distanceKm <= 2.0) {
+  if (feeMode === 'per_km') {
+    const rate = Number(perKmRate) || 0;
+    const distKm = Math.min(50, Math.max(0, Math.round(distanceKm * 10) / 10));
+    fee = Math.round(distKm * rate);
+    zoneName = `Antar ${distKm} km`;
+    estimatedMin = 15 + Math.floor(distKm * 5);
+    estimatedMax = 25 + Math.floor(distKm * 5);
+  } else if (distanceKm <= 2.0) {
     fee = 5000;
     zoneName = `Area Dekat (${distanceKm} km)`;
     estimatedMin = 15;

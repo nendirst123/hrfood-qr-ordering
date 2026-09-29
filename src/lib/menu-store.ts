@@ -83,12 +83,14 @@ export async function saveMenuOverrides(overrides: Record<string, MenuItem>): Pr
 // Ambil Seluruh Menu dengan Integrasi Override & Deleted
 // ----------------------------------------------------
 export async function getMenuWithAvailability(): Promise<MenuItem[]> {
-  const [baseItemsRaw, deletedIdsArr, overrides, availabilityMap] = await Promise.all([
+  const [baseItemsRaw, deletedIdsArr, overrides, availabilityMap, storeConfig] = await Promise.all([
     kvGet<MenuItem[]>(MENU_KEY, []),
     getDeletedMenuIds(),
     getMenuOverrides(),
     getAvailabilityMap(),
+    kvGet<{ allSoldOut?: boolean }>('store_config', {}),
   ]);
+  const allSoldOut = storeConfig?.allSoldOut === true;
 
   let baseItems: MenuItem[] = baseItemsRaw;
   if (!baseItems || baseItems.length === 0) {
@@ -107,9 +109,11 @@ export async function getMenuWithAvailability(): Promise<MenuItem[]> {
     const override = overrides[item.id];
     let currentItem = override ? { ...item, ...override, id: item.id } : { ...item };
 
-    // Terapkan availability
+    // Terapkan availability (flag allSoldOut menimpa semua jadi habis)
     const availEntry = availabilityMap[item.id];
-    if (availEntry !== undefined) {
+    if (allSoldOut) {
+      currentItem.isAvailable = false;
+    } else if (availEntry !== undefined) {
       currentItem.isAvailable = availEntry.isAvailable;
       if (availEntry.updatedAt) {
         currentItem.updatedAt = new Date(availEntry.updatedAt).toISOString();
@@ -128,7 +132,7 @@ export async function getMenuWithAvailability(): Promise<MenuItem[]> {
       const availEntry = availabilityMap[customItem.id];
       const itemWithAvail: MenuItem = {
         ...customItem,
-        isAvailable: availEntry !== undefined ? availEntry.isAvailable : customItem.isAvailable !== false,
+        isAvailable: allSoldOut ? false : (availEntry !== undefined ? availEntry.isAvailable : customItem.isAvailable !== false),
         updatedAt: availEntry?.updatedAt ? new Date(availEntry.updatedAt).toISOString() : customItem.updatedAt,
       };
       mergedItems.push(itemWithAvail);

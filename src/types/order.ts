@@ -57,6 +57,9 @@ export interface DeliverySettings {
   freeDeliveryThreshold?: number;
   whatsappNumber: string;
   zones: DeliveryZone[];
+  // Mode tarif: 'per_zone' (tarif flat per zona) atau 'per_km' (tarif × jarak)
+  feeMode?: 'per_zone' | 'per_km';
+  perKmRate?: number; // tarif per km, mis. 5000
 }
 
 export interface Order {
@@ -108,5 +111,6 @@ export interface StoreConfig {
   storeLatitude?: number; // Titik GPS latitude toko
   storeLongitude?: number; // Titik GPS longitude toko
   storePhone?: string; // Nomor WhatsApp resmi toko
+  allSoldOut?: boolean; // true = semua menu dianggap habis
 }
 

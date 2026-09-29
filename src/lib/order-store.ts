@@ -150,20 +150,34 @@ export async function createOrder(payload: {
     if (!settings.isEnabled) {
       throw new Error('Layanan delivery sedang nonaktif.');
     }
-    const zone = settings.zones.find(
-      (z) => z.id === payload.deliveryZoneId && z.isActive
-    );
-    if (!zone) {
-      throw new Error('Zona delivery tidak valid. Silakan pilih zona lagi.');
-    }
     if (settings.minOrderAmount > 0 && subtotal < settings.minOrderAmount) {
       throw new Error(
         `Minimal belanja untuk delivery Rp${settings.minOrderAmount.toLocaleString('id-ID')}.`
       );
     }
-    serverZoneId = zone.id;
-    serverZoneName = zone.name;
-    deliveryFee = Number(zone.fee) || 0;
+    const feeMode = settings.feeMode || 'per_zone';
+    if (feeMode === 'per_km') {
+      // Tarif per km: fee = jarak (km) × tarif. Mis. 1,2 km × Rp5.000 = Rp6.000.
+      const rate = Number(settings.perKmRate) || 0;
+      if (rate <= 0) {
+        throw new Error('Tarif per-km belum diatur owner.');
+      }
+      const rawKm = Number(payload.deliveryDistanceKm) || 0;
+      const distKm = Math.min(50, Math.max(0, Math.round(rawKm * 10) / 10));
+      serverZoneId = undefined;
+      serverZoneName = `Antar ${distKm} km`;
+      deliveryFee = Math.round(distKm * rate);
+    } else {
+      const zone = settings.zones.find(
+        (z) => z.id === payload.deliveryZoneId && z.isActive
+      );
+      if (!zone) {
+        throw new Error('Zona delivery tidak valid. Silakan pilih zona lagi.');
+      }
+      serverZoneId = zone.id;
+      serverZoneName = zone.name;
+      deliveryFee = Number(zone.fee) || 0;
+    }
     const freeThreshold = Number(settings.freeDeliveryThreshold) || 0;
     if (freeThreshold > 0 && subtotal >= freeThreshold) {
       deliveryFee = 0;

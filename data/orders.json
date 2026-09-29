@@ -1,5 +1,37 @@
 [
   {
+    "id": "ord_1790687685324_cbp6s",
+    "orderNumber": "ORD-004",
+    "orderType": "delivery",
+    "tableNumber": "DLV",
+    "customerName": "Tes PerKm",
+    "customerPhone": "081234567890",
+    "deliveryAddress": "Jl Tes 1",
+    "deliveryZoneName": "Antar 1.2 km",
+    "deliveryDistanceKm": 1.2,
+    "deliveryFee": 6000,
+    "items": [
+      {
+        "itemId": "hr-paket-01",
+        "name": "Paket Sahabat Dompet",
+        "basePrice": 9000,
+        "unitPrice": 9000,
+        "quantity": 2,
+        "selectedOptions": [],
+        "image": "/menu/telur-dadar-barendo.jpg"
+      }
+    ],
+    "subtotal": 18000,
+    "tax": 0,
+    "discountAmount": 0,
+    "total": 24000,
+    "paymentMethod": "cashier",
+    "isPaid": false,
+    "status": "pending_payment",
+    "createdAt": "2026-09-29T13:14:45.324Z",
+    "updatedAt": "2026-09-29T13:14:45.324Z"
+  },
+  {
     "id": "ord_1790426495023_hgm3g",
     "orderNumber": "ORD-003",
     "orderType": "delivery",

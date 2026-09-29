@@ -1,40 +1,5 @@
 {
-  "isEnabled": true,
-  "minOrderAmount": 15000,
-  "freeDeliveryThreshold": 150000,
-  "whatsappNumber": "6283838432860",
-  "zones": [
-    {
-      "id": "zone-1",
-      "name": "Zona 1 - Radius Dekat (< 2 km)",
-      "description": "Area sekitar resto, kantor kelurahan, dan perumahan terdekat",
-      "fee": 5000,
-      "estimatedTime": "15 - 25 Menit",
-      "isActive": true
-    },
-    {
-      "id": "zone-2",
-      "name": "Zona 2 - Radius Sedang (2 - 5 km)",
-      "description": "Area perumahan pusat kota, ruko, dan sekolah/kampus",
-      "fee": 10000,
-      "estimatedTime": "25 - 35 Menit",
-      "isActive": true
-    },
-    {
-      "id": "zone-3",
-      "name": "Zona 3 - Radius Luas (5 - 8 km)",
-      "description": "Area pinggiran kota dan kawasan industri",
-      "fee": 15000,
-      "estimatedTime": "35 - 50 Menit",
-      "isActive": true
-    },
-    {
-      "id": "zone-4",
-      "name": "Zona 4 - Luar Area (> 8 km)",
-      "description": "Pengantaran jarak jauh khusus, tarif disesuaikan",
-      "fee": 25000,
-      "estimatedTime": "45 - 60 Menit",
-      "isActive": true
-    }
-  ]
+  "feeMode": "per_km",
+  "perKmRate": 5000,
+  "isEnabled": true
 }

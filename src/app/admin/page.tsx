@@ -83,6 +83,7 @@ function AdminDashboardInner() {
   const [isStoreModalOpen, setIsStoreModalOpen] = useState(false);
   const [isSavingStore, setIsSavingStore] = useState(false);
   const [formIsOpen, setFormIsOpen] = useState(true);
+  const [formAllSoldOut, setFormAllSoldOut] = useState(false);
   const [formAutoSchedule, setFormAutoSchedule] = useState(false);
   const [formOpenTime, setFormOpenTime] = useState('10:00');
   const [formCloseTime, setFormCloseTime] = useState('22:00');
@@ -419,6 +420,7 @@ function AdminDashboardInner() {
         setStoreConfig(dataStore.data);
         if (!isStoreModalOpen) {
           setFormIsOpen(dataStore.data.isOpen);
+          setFormAllSoldOut(!!dataStore.data.allSoldOut);
           setFormAutoSchedule(!!dataStore.data.autoSchedule);
           setFormOpenTime(dataStore.data.openTime || '10:00');
           setFormCloseTime(dataStore.data.closeTime || '22:00');
@@ -494,6 +496,17 @@ function AdminDashboardInner() {
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
     link.setAttribute('download', `laporan_penjualan_hrfood_${reportDate}_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
+  // Unduh Laporan PDF Rapi
+  const handleExportPDF = () => {
+    const activeDate = reportDate === 'custom' ? customReportDate : reportDate;
+    const link = document.createElement('a');
+    link.setAttribute('href', `/api/reports/pdf?date=${activeDate || 'today'}`);
+    link.setAttribute('download', `laporan-hrfood.pdf`);
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -798,6 +811,7 @@ function AdminDashboardInner() {
     try {
       const payload: StoreConfig = {
         isOpen: formIsOpen,
+        allSoldOut: formAllSoldOut,
         autoSchedule: formAutoSchedule,
         openTime: formOpenTime,
         closeTime: formCloseTime,
@@ -1485,6 +1499,14 @@ function AdminDashboardInner() {
                 </button>
 
                 <button
+                  onClick={handleExportPDF}
+                  className="flex-1 md:flex-none px-3.5 py-1.5 bg-red-600 hover:bg-red-500 text-white font-bold text-xs rounded-xl shadow transition flex items-center justify-center gap-1.5 active:scale-95"
+                  title="Unduh laporan rapi format PDF"
+                >
+                  <span>📄</span> Unduh PDF
+                </button>
+
+                <button
                   onClick={() => setIsResetModalOpen(true)}
                   className="flex-1 md:flex-none px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/80 dark:hover:bg-rose-900 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/80 font-bold text-xs rounded-xl shadow transition flex items-center justify-center gap-1.5 active:scale-95"
                   title="Reset Semua Pesanan & Mulai dari ORD-001"
@@ -1965,6 +1987,36 @@ function AdminDashboardInner() {
                       </button>
                     </div>
                     <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 block">Promo subsidi gratis ongkir</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Mode Tarif Ongkir
+                    </label>
+                    <select
+                      value={deliverySettings.feeMode || 'per_zone'}
+                      onChange={e => setDeliverySettings({ ...deliverySettings, feeMode: e.target.value as 'per_zone' | 'per_km' })}
+                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-purple-500"
+                    >
+                      <option value="per_km">Per KM (jarak × tarif)</option>
+                      <option value="per_zone">Per Zona (flat per area)</option>
+                    </select>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 block">Per KM: 1,2 km × Rp5.000 = Rp6.000</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Tarif per KM (Rp)
+                    </label>
+                    <input
+                      type="number"
+                      value={deliverySettings.perKmRate ?? 5000}
+                      onChange={e => setDeliverySettings({ ...deliverySettings, perKmRate: Number(e.target.value) })}
+                      placeholder="Contoh: 5000"
+                      disabled={(deliverySettings.feeMode || 'per_zone') !== 'per_km'}
+                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-purple-500 font-mono disabled:opacity-40"
+                    />
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 block">Berlaku jika mode Per KM</span>
                   </div>
                 </form>
               )}
@@ -2834,6 +2886,27 @@ function AdminDashboardInner() {
                   >
                     <Power className="w-3.5 h-3.5" />
                     <span>{formIsOpen ? '🟢 BUKA' : '🔴 TUTUP'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Bagian 1b: Tandai Semua Menu Habis */}
+              <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="font-bold text-slate-900 dark:text-white text-xs block">Semua Menu Habis</label>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Satu tombol: semua menu tampil habis. Stok per item tetap tersimpan.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setFormAllSoldOut(!formAllSoldOut)}
+                    className={`px-3 py-1.5 rounded-xl font-black text-xs transition flex items-center gap-1.5 shadow ${
+                      formAllSoldOut
+                        ? 'bg-amber-600 hover:bg-amber-500 text-white'
+                        : 'bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200'
+                    }`}
+                  >
+                    <span>{formAllSoldOut ? '🔥 SEMUA HABIS' : '✅ Stok Normal'}</span>
                   </button>
                 </div>
               </div>

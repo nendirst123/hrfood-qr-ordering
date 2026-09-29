@@ -491,9 +491,11 @@ function OrderingAppContent() {
     return calculateDeliveryFeeFromKm(
       deliveryDistanceKm || 1.8,
       cartSubtotal,
-      deliverySettings?.freeDeliveryThreshold
+      deliverySettings?.freeDeliveryThreshold,
+      deliverySettings?.feeMode || 'per_zone',
+      deliverySettings?.perKmRate
     );
-  }, [deliveryDistanceKm, cartSubtotal, deliverySettings?.freeDeliveryThreshold]);
+  }, [deliveryDistanceKm, cartSubtotal, deliverySettings?.freeDeliveryThreshold, deliverySettings?.feeMode, deliverySettings?.perKmRate]);
 
   const currentDeliveryFee = useMemo(() => {
     if (orderType !== 'delivery') return 0;
@@ -1373,6 +1375,11 @@ function OrderingAppContent() {
                             `Rp ${currentDeliveryFee.toLocaleString('id-ID')}`
                           )}
                         </span>
+                        {(deliverySettings?.feeMode || 'per_zone') === 'per_km' && currentDeliveryFee > 0 && (
+                          <span className="text-[10px] text-purple-600 dark:text-purple-400 block">
+                            {deliveryDistanceKm} km × Rp {(deliverySettings?.perKmRate || 0).toLocaleString('id-ID')}
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -1652,7 +1659,9 @@ function OrderingAppContent() {
                 )}
                 {orderType === 'delivery' && (
                   <div className="flex justify-between text-purple-700 dark:text-purple-300 font-medium">
-                    <span>Ongkos Kirim ({deliveryDistanceKm} km &bull; {deliveryCalculation.zoneName})</span>
+                    <span>Ongkos Kirim {(deliverySettings?.feeMode || 'per_zone') === 'per_km'
+                      ? `(${deliveryDistanceKm} km × Rp ${(deliverySettings?.perKmRate || 0).toLocaleString('id-ID')})`
+                      : `(${deliveryDistanceKm} km • ${deliveryCalculation.zoneName})`}</span>
                     <span>
                       {currentDeliveryFee === 0 ? (
                         <span className="text-emerald-600 dark:text-emerald-400 font-bold">GRATIS</span>
