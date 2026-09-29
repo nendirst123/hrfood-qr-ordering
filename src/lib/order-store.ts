@@ -2,6 +2,7 @@ import { kvGet, kvSet } from './db';
 import { Order, OrderStatus, PaymentMethod, CartItem, OrderType, MenuItem } from '@/types/order';
 import { getMenuWithAvailability } from './menu-store';
 import { validatePromo } from './promo-store';
+import { getDeliverySettings } from './delivery-store';
 
 const ORDERS_KEY = 'orders';
 
@@ -138,7 +139,36 @@ export async function createOrder(payload: {
     discountAmount = promoCheck.discountAmount;
   }
 
-  const deliveryFee = payload.orderType === 'delivery' ? (payload.deliveryFee || 0) : 0;
+  // === KEAMANAN: ongkir dihitung server dari delivery_settings, bukan dari client ===
+  // Client hanya boleh memilih deliveryZoneId; nama zona & fee diambil dari server.
+  let deliveryFee = 0;
+  let serverZoneId: string | undefined;
+  let serverZoneName: string | undefined;
+  const orderTypeForDelivery = (payload.orderType as OrderType) || 'dine_in';
+  if (orderTypeForDelivery === 'delivery') {
+    const settings = await getDeliverySettings();
+    if (!settings.isEnabled) {
+      throw new Error('Layanan delivery sedang nonaktif.');
+    }
+    const zone = settings.zones.find(
+      (z) => z.id === payload.deliveryZoneId && z.isActive
+    );
+    if (!zone) {
+      throw new Error('Zona delivery tidak valid. Silakan pilih zona lagi.');
+    }
+    if (settings.minOrderAmount > 0 && subtotal < settings.minOrderAmount) {
+      throw new Error(
+        `Minimal belanja untuk delivery Rp${settings.minOrderAmount.toLocaleString('id-ID')}.`
+      );
+    }
+    serverZoneId = zone.id;
+    serverZoneName = zone.name;
+    deliveryFee = Number(zone.fee) || 0;
+    const freeThreshold = Number(settings.freeDeliveryThreshold) || 0;
+    if (freeThreshold > 0 && subtotal >= freeThreshold) {
+      deliveryFee = 0;
+    }
+  }
   const total = Math.max(0, subtotal - discountAmount + deliveryFee);
 
   const orderSeq = (orders.length + 1).toString().padStart(3, '0');
@@ -170,8 +200,8 @@ export async function createOrder(payload: {
     customerPhone: payload.customerPhone?.trim(),
     deliveryAddress: payload.deliveryAddress?.trim(),
     deliveryNotes: payload.deliveryNotes?.trim(),
-    deliveryZoneId: payload.deliveryZoneId,
-    deliveryZoneName: payload.deliveryZoneName,
+    deliveryZoneId: serverZoneId,
+    deliveryZoneName: serverZoneName,
     deliveryDistanceKm: payload.deliveryDistanceKm,
     deliveryFee,
     pickupTime: payload.pickupTime?.trim(),

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getOrderById, updateOrderStatus, syncOrders } from '@/lib/order-store';
+import { getOrderById, updateOrderStatus } from '@/lib/order-store';
 import { requireAdmin } from '@/lib/admin-auth';
 
 export const dynamic = 'force-dynamic';
@@ -9,23 +9,11 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    let order = await getOrderById(params.id);
+    const order = await getOrderById(params.id);
 
-    // Self-healing: jika instance serverless baru belum memiliki order di /tmp, pulihkan dari header fallback
-    if (!order) {
-      const fallbackHeader = request.headers.get('x-fallback-order');
-      if (fallbackHeader) {
-        try {
-          const parsed = JSON.parse(decodeURIComponent(fallbackHeader));
-          if (parsed && parsed.id === params.id) {
-            await syncOrders([parsed]);
-            order = parsed;
-          }
-        } catch (e) {
-          // ignore header parse error
-        }
-      }
-    }
+    // KEAMANAN: fallback header x-fallback-order DIHAPUS.
+    // Order pelanggan tidak boleh dipulihkan ke database dari data browser.
+    // Dengan database Neon bersama, order selalu ditemukan via ID.
 
     if (!order) {
       return NextResponse.json({ success: false, error: 'Pesanan tidak ditemukan' }, { status: 404 });

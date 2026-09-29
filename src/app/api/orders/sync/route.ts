@@ -1,10 +1,16 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { syncOrders } from '@/lib/order-store';
+import { requireAdmin } from '@/lib/admin-auth';
 import { Order } from '@/types/order';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  // KEAMANAN: sinkronisasi order massal hanya untuk admin/dapur.
+  // Pelanggan tidak boleh menyuntikkan order arbitrer ke database.
+  const denied = requireAdmin(req);
+  if (denied) return denied;
+
   try {
     const body = await req.json();
     let incoming: Order[] = [];

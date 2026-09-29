@@ -38,7 +38,6 @@ export default function OrderTrackingPage() {
   const [isSimulatingPay, setIsSimulatingPay] = useState<boolean>(false);
   const [showOriginalBarcode, setShowOriginalBarcode] = useState<boolean>(false);
   const retryCountRef = useRef<number>(0);
-  const isSyncingRef = useRef<boolean>(false);
 
   // 1. Inisialisasi awal langsung dari LocalStorage (Zero Delay & Anti-404)
   useEffect(() => {
@@ -64,39 +63,15 @@ export default function OrderTrackingPage() {
       setOrder(localData);
       setLoading(false);
       setError('');
-
-      // Kirim sinkronisasi ke serverless backend secara background (Self-Healing)
-      if (!isSyncingRef.current) {
-        isSyncingRef.current = true;
-        fetch('/api/orders/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ orders: [localData] }),
-        })
-          .catch(() => {})
-          .finally(() => {
-            isSyncingRef.current = false;
-          });
-      }
+      // Database Neon dipakai bersama semua instance, jadi order selalu
+      // ditemukan via ID — tidak perlu sinkronisasi dari browser lagi.
     }
   }, [orderId]);
 
-  // 2. Fetch Order dari Server dengan Fallback Header & Resilience
+  // 2. Fetch Order dari Server
   const fetchOrder = async () => {
     try {
-      // Ambil fallback payload dari state atau local storage
-      let fallbackPayload = '';
-      try {
-        const stored = localStorage.getItem(`hrfood_order_${orderId}`) || localStorage.getItem('hrfood_latest_order');
-        if (stored) fallbackPayload = encodeURIComponent(stored);
-      } catch (e) {}
-
-      const headers: Record<string, string> = {};
-      if (fallbackPayload) {
-        headers['x-fallback-order'] = fallbackPayload;
-      }
-
-      const res = await fetch(`/api/orders/${orderId}`, { headers });
+      const res = await fetch(`/api/orders/${orderId}`);
       const data = await res.json();
 
       if (data.success && data.data) {
@@ -107,22 +82,9 @@ export default function OrderTrackingPage() {
           localStorage.setItem(`hrfood_order_${orderId}`, JSON.stringify(data.data));
         } catch (e) {}
       } else {
-        // Jika server mengembalikan 404
-        if (order) {
-          // Jangan timpa jika kita sudah memiliki data pesanan di state!
-          if (!isSyncingRef.current) {
-            isSyncingRef.current = true;
-            fetch('/api/orders/sync', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ orders: [order] }),
-            })
-              .catch(() => {})
-              .finally(() => {
-                isSyncingRef.current = false;
-              });
-          }
-        } else {
+        // Jika server mengembalikan 404, tampilkan data lokal bila ada,
+        // tanpa menulis apa pun ke server.
+        if (!order) {
           // Cek kembali localStorage jika state masih kosong
           try {
             const stored = localStorage.getItem(`hrfood_order_${orderId}`);

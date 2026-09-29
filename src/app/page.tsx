@@ -608,6 +608,8 @@ function OrderingAppContent() {
         payload.deliveryAddress = deliveryAddress.trim();
         payload.deliveryNotes = deliveryNotes.trim() || undefined;
         payload.deliveryDistanceKm = deliveryDistanceKm || 1.8;
+        // KEAMANAN: kirim ID zona; fee & nama zona dihitung ulang di server.
+        payload.deliveryZoneId = selectedZone?.id;
         payload.deliveryZoneName = deliveryCalculation.zoneName;
         payload.deliveryFee = currentDeliveryFee;
       } else if (orderType === 'takeaway') {
