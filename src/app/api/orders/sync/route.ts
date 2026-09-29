@@ -21,7 +21,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, message: 'Tidak ada data pesanan untuk disinkronkan' }, { status: 400 });
     }
 
-    const synced = syncOrders(incoming);
+    const synced = await syncOrders(incoming);
     return NextResponse.json({
       success: true,
       message: `${incoming.length} pesanan berhasil disinkronkan`,

@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const settings = getDeliverySettings();
+    const settings = await getDeliverySettings();
     return NextResponse.json({ success: true, data: settings });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
   if (denied) return denied;
   try {
     const body = await request.json();
-    const updated = saveDeliverySettings(body as DeliverySettings);
+    const updated = await saveDeliverySettings(body as DeliverySettings);
     return NextResponse.json({ success: true, data: updated });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
@@ -31,7 +31,7 @@ export async function PUT(request: NextRequest) {
   if (denied) return denied;
   try {
     const body = await request.json();
-    const updated = saveDeliverySettings(body as DeliverySettings);
+    const updated = await saveDeliverySettings(body as DeliverySettings);
     return NextResponse.json({ success: true, data: updated });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });

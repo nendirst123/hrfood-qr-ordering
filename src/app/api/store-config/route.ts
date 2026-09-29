@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export async function GET() {
-  const config = getStoreConfig();
+  const config = await getStoreConfig();
   
   // Jika autoSchedule aktif, cek jam saat ini (WIB = UTC+7)
   let computedIsOpen = config.isOpen;
@@ -43,14 +43,14 @@ export async function POST(req: NextRequest) {
   if (denied) return denied;
   try {
     const body: Partial<StoreConfig> = await req.json();
-    const current = getStoreConfig();
+    const current = await getStoreConfig();
 
     const updated: StoreConfig = {
       ...current,
       ...body,
     };
 
-    saveStoreConfig(updated);
+    await saveStoreConfig(updated);
     return NextResponse.json({ success: true, data: updated });
   } catch (err) {
     console.error('Save store config error:', err);

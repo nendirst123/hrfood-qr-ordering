@@ -1,15 +1,7 @@
-import fs from 'fs';
-import path from 'path';
+import { kvGet, kvSet } from './db';
 import { PromoCode } from '@/types/order';
 
-const isVercel = process.env.VERCEL === '1';
-const DATA_DIR = isVercel ? '/tmp/data' : path.join(process.cwd(), 'data');
-const PROMO_FILE = path.join(DATA_DIR, 'promos.json');
-const BUNDLED_PROMO_FILE = path.join(process.cwd(), 'data', 'promos.json');
-
-declare global {
-  var __CACHED_PROMOS__: PromoCode[] | undefined;
-}
+const PROMOS_KEY = 'promos';
 
 const DEFAULT_PROMOS: PromoCode[] = [
   {
@@ -55,82 +47,52 @@ const DEFAULT_PROMOS: PromoCode[] = [
   },
 ];
 
-function ensureDataDir() {
-  try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-    if (!fs.existsSync(PROMO_FILE)) {
-      if (fs.existsSync(BUNDLED_PROMO_FILE)) {
-        const bundledContent = fs.readFileSync(BUNDLED_PROMO_FILE, 'utf-8');
-        fs.writeFileSync(PROMO_FILE, bundledContent, 'utf-8');
-      } else {
-        fs.writeFileSync(PROMO_FILE, JSON.stringify(DEFAULT_PROMOS, null, 2), 'utf-8');
-      }
-    }
-  } catch (err) {
-    console.warn('Filesystem access warning (Vercel serverless):', err);
-  }
+export async function getAllPromos(): Promise<PromoCode[]> {
+  const data = await kvGet<PromoCode[]>(PROMOS_KEY, DEFAULT_PROMOS);
+  return Array.isArray(data) && data.length > 0 ? data : DEFAULT_PROMOS;
 }
 
-export function getAllPromos(): PromoCode[] {
-  ensureDataDir();
+export async function saveAllPromos(promos: PromoCode[]): Promise<boolean> {
   try {
-    if (fs.existsSync(PROMO_FILE)) {
-      const raw = fs.readFileSync(PROMO_FILE, 'utf-8');
-      const data: PromoCode[] = JSON.parse(raw);
-      globalThis.__CACHED_PROMOS__ = data;
-      return data;
-    }
-  } catch (err) {
-    console.error('Failed reading promos file:', err);
-  }
-  return globalThis.__CACHED_PROMOS__ || DEFAULT_PROMOS;
-}
-
-export function saveAllPromos(promos: PromoCode[]): boolean {
-  ensureDataDir();
-  globalThis.__CACHED_PROMOS__ = promos;
-  try {
-    fs.writeFileSync(PROMO_FILE, JSON.stringify(promos, null, 2), 'utf-8');
+    await kvSet(PROMOS_KEY, promos);
     return true;
   } catch (err) {
-    console.warn('Failed writing promos to filesystem, kept in memory:', err);
+    console.warn('Failed saving promos:', err);
     return true;
   }
 }
 
-export function upsertPromo(promo: PromoCode): PromoCode {
-  const current = getAllPromos();
+export async function upsertPromo(promo: PromoCode): Promise<PromoCode> {
+  const current = await getAllPromos();
   const index = current.findIndex(p => p.id === promo.id || p.code.toUpperCase() === promo.code.toUpperCase());
   if (index >= 0) {
     current[index] = { ...promo, id: current[index].id, code: promo.code.toUpperCase() };
   } else {
     current.push({ ...promo, code: promo.code.toUpperCase() });
   }
-  saveAllPromos(current);
+  await saveAllPromos(current);
   return promo;
 }
 
-export function deletePromo(id: string): boolean {
-  const current = getAllPromos();
+export async function deletePromo(id: string): Promise<boolean> {
+  const current = await getAllPromos();
   const filtered = current.filter(p => p.id !== id);
   if (filtered.length === current.length) return false;
   return saveAllPromos(filtered);
 }
 
-export function validatePromo(code: string, subtotal: number): {
+export async function validatePromo(code: string, subtotal: number): Promise<{
   valid: boolean;
   promo?: PromoCode;
   discountAmount: number;
   message: string;
-} {
+}> {
   const cleanCode = (code || '').trim().toUpperCase();
   if (!cleanCode) {
     return { valid: false, discountAmount: 0, message: 'Kode promo belum dimasukkan' };
   }
 
-  const promos = getAllPromos();
+  const promos = await getAllPromos();
   const found = promos.find(p => p.code.toUpperCase() === cleanCode && p.isActive);
 
   if (!found) {

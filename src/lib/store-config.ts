@@ -1,15 +1,7 @@
-import fs from 'fs';
-import path from 'path';
+import { kvGet, kvSet } from './db';
 import { StoreConfig } from '@/types/order';
 
-const isVercel = process.env.VERCEL === '1';
-const DATA_DIR = isVercel ? '/tmp/data' : path.join(process.cwd(), 'data');
-const CONFIG_FILE = path.join(DATA_DIR, 'store_config.json');
-const BUNDLED_CONFIG_FILE = path.join(process.cwd(), 'data', 'store_config.json');
-
-declare global {
-  var __CACHED_STORE_CONFIG__: StoreConfig | undefined;
-}
+const CONFIG_KEY = 'store_config';
 
 const DEFAULT_STORE_CONFIG: StoreConfig = {
   isOpen: true,
@@ -23,46 +15,12 @@ const DEFAULT_STORE_CONFIG: StoreConfig = {
   storePhone: '0838-3843-2860',
 };
 
-function ensureDataDir() {
-  try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-    if (!fs.existsSync(CONFIG_FILE)) {
-      if (fs.existsSync(BUNDLED_CONFIG_FILE)) {
-        const bundledContent = fs.readFileSync(BUNDLED_CONFIG_FILE, 'utf-8');
-        fs.writeFileSync(CONFIG_FILE, bundledContent, 'utf-8');
-      } else {
-        fs.writeFileSync(CONFIG_FILE, JSON.stringify(DEFAULT_STORE_CONFIG, null, 2), 'utf-8');
-      }
-    }
-  } catch (err) {
-    console.warn('Filesystem access warning (Vercel serverless):', err);
-  }
+export async function getStoreConfig(): Promise<StoreConfig> {
+  const config = await kvGet<StoreConfig | null>(CONFIG_KEY, null);
+  return config || DEFAULT_STORE_CONFIG;
 }
 
-export function getStoreConfig(): StoreConfig {
-  ensureDataDir();
-  try {
-    if (fs.existsSync(CONFIG_FILE)) {
-      const raw = fs.readFileSync(CONFIG_FILE, 'utf-8');
-      const config: StoreConfig = JSON.parse(raw);
-      globalThis.__CACHED_STORE_CONFIG__ = config;
-      return config;
-    }
-  } catch (err) {
-    console.error('Failed reading store config file, using fallback cache:', err);
-  }
-  return globalThis.__CACHED_STORE_CONFIG__ || DEFAULT_STORE_CONFIG;
-}
-
-export function saveStoreConfig(config: StoreConfig): StoreConfig {
-  ensureDataDir();
-  globalThis.__CACHED_STORE_CONFIG__ = config;
-  try {
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf-8');
-  } catch (err) {
-    console.warn('Failed writing store config to filesystem, kept in memory:', err);
-  }
+export async function saveStoreConfig(config: StoreConfig): Promise<StoreConfig> {
+  await kvSet(CONFIG_KEY, config);
   return config;
 }

@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const dateParam = searchParams.get('date');
 
-  const orders = getAllOrders();
+  const orders = await getAllOrders();
 
   let targetDateStr = new Date().toISOString().split('T')[0];
   if (dateParam && dateParam !== 'today') {

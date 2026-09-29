@@ -1,15 +1,7 @@
-import fs from 'fs';
-import path from 'path';
+import { kvGet, kvSet } from './db';
 import { DeliverySettings, DeliveryZone } from '@/types/order';
 
-const isVercel = process.env.VERCEL === '1';
-const DATA_DIR = isVercel ? '/tmp/data' : path.join(process.cwd(), 'data');
-const DATA_FILE = path.join(DATA_DIR, 'delivery_settings.json');
-const BUNDLED_DATA_FILE = path.join(process.cwd(), 'data', 'delivery_settings.json');
-
-declare global {
-  var __CACHED_DELIVERY_SETTINGS__: DeliverySettings | undefined;
-}
+const SETTINGS_KEY = 'delivery_settings';
 
 const DEFAULT_SETTINGS: DeliverySettings = {
   isEnabled: true,
@@ -52,52 +44,18 @@ const DEFAULT_SETTINGS: DeliverySettings = {
   ],
 };
 
-function ensureDataDir() {
-  try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-    if (!fs.existsSync(DATA_FILE)) {
-      if (fs.existsSync(BUNDLED_DATA_FILE)) {
-        const bundledContent = fs.readFileSync(BUNDLED_DATA_FILE, 'utf-8');
-        fs.writeFileSync(DATA_FILE, bundledContent, 'utf-8');
-      } else {
-        fs.writeFileSync(DATA_FILE, JSON.stringify(DEFAULT_SETTINGS, null, 2), 'utf-8');
-      }
-    }
-  } catch (err) {
-    console.warn('Filesystem access warning (Vercel serverless):', err);
-  }
+export async function getDeliverySettings(): Promise<DeliverySettings> {
+  const settings = await kvGet<DeliverySettings | null>(SETTINGS_KEY, null);
+  return settings || DEFAULT_SETTINGS;
 }
 
-export function getDeliverySettings(): DeliverySettings {
-  ensureDataDir();
-  try {
-    if (fs.existsSync(DATA_FILE)) {
-      const raw = fs.readFileSync(DATA_FILE, 'utf-8');
-      const settings: DeliverySettings = JSON.parse(raw);
-      globalThis.__CACHED_DELIVERY_SETTINGS__ = settings;
-      return settings;
-    }
-  } catch (err) {
-    console.error('Failed reading delivery settings file, using fallback cache:', err);
-  }
-  return globalThis.__CACHED_DELIVERY_SETTINGS__ || DEFAULT_SETTINGS;
-}
-
-export function saveDeliverySettings(settings: DeliverySettings): DeliverySettings {
-  ensureDataDir();
-  globalThis.__CACHED_DELIVERY_SETTINGS__ = settings;
-  try {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(settings, null, 2), 'utf-8');
-  } catch (err) {
-    console.warn('Failed writing delivery settings to filesystem, kept in memory:', err);
-  }
+export async function saveDeliverySettings(settings: DeliverySettings): Promise<DeliverySettings> {
+  await kvSet(SETTINGS_KEY, settings);
   return settings;
 }
 
-export function updateDeliveryZone(zone: DeliveryZone): DeliverySettings {
-  const current = getDeliverySettings();
+export async function updateDeliveryZone(zone: DeliveryZone): Promise<DeliverySettings> {
+  const current = await getDeliverySettings();
   const index = current.zones.findIndex(z => z.id === zone.id);
   if (index >= 0) {
     current.zones[index] = zone;
@@ -107,8 +65,8 @@ export function updateDeliveryZone(zone: DeliveryZone): DeliverySettings {
   return saveDeliverySettings(current);
 }
 
-export function deleteDeliveryZone(zoneId: string): DeliverySettings {
-  const current = getDeliverySettings();
+export async function deleteDeliveryZone(zoneId: string): Promise<DeliverySettings> {
+  const current = await getDeliverySettings();
   current.zones = current.zones.filter(z => z.id !== zoneId);
   return saveDeliverySettings(current);
 }

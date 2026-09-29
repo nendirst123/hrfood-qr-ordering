@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
   if (denied) return denied;
 
   try {
-    const result = resetAllOrders();
+    const result = await resetAllOrders();
     return NextResponse.json({
       success: true,
       message: `Berhasil mereset pesanan. ${result.count} pesanan sebelumnya telah dicadangkan.`,

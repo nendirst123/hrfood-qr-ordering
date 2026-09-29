@@ -19,10 +19,10 @@ export const revalidate = 0;
 
 // GET: Ambil seluruh menu, peta ketersediaan, daftar deletedIds, & overrides
 export async function GET() {
-  const items = getMenuWithAvailability();
-  const availabilityMap = getAvailabilityMap();
-  const deletedIds = getDeletedMenuIds();
-  const overrides = getMenuOverrides();
+  const items = await getMenuWithAvailability();
+  const availabilityMap = await getAvailabilityMap();
+  const deletedIds = await getDeletedMenuIds();
+  const overrides = await getMenuOverrides();
   return NextResponse.json({ 
     success: true, 
     items, 
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
 
     // 1. Sinkronisasi perubahan menu komprehensif (Self-Healing Serverless)
     if (body.syncMenuData && typeof body.syncMenuData === 'object') {
-      const res = syncMenuData(body.syncMenuData);
+      const res = await syncMenuData(body.syncMenuData);
       return NextResponse.json({ 
         success: true, 
         items: res.items, 
@@ -53,35 +53,35 @@ export async function POST(req: NextRequest) {
 
     // 2. Sinkronisasi ketersediaan stok massal (legacy support)
     if (body.syncAvailability && typeof body.syncAvailability === 'object') {
-      const mergedMap = syncMenuAvailability(body.syncAvailability);
-      const items = getMenuWithAvailability();
+      const mergedMap = await syncMenuAvailability(body.syncAvailability);
+      const items = await getMenuWithAvailability();
       return NextResponse.json({ 
         success: true, 
         availabilityMap: mergedMap, 
         items,
-        deletedIds: getDeletedMenuIds(),
-        overrides: getMenuOverrides(),
+        deletedIds: await getDeletedMenuIds(),
+        overrides: await getMenuOverrides(),
       });
     }
 
     // 3. Pulihkan menu yang pernah dihapus
     if (body.restoreId && typeof body.restoreId === 'string') {
-      const restored = restoreMenuItem(body.restoreId);
+      const restored = await restoreMenuItem(body.restoreId);
       return NextResponse.json({ 
         success: true, 
         data: restored,
-        deletedIds: getDeletedMenuIds(),
-        items: getMenuWithAvailability(),
+        deletedIds: await getDeletedMenuIds(),
+        items: await getMenuWithAvailability(),
       });
     }
 
     // 4. Toggle stok satuan: { id, isAvailable, updatedAt? }
     if (body.id && typeof body.isAvailable === 'boolean') {
-      const res = setMenuItemAvailability(body.id, body.isAvailable, body.updatedAt);
+      const res = await setMenuItemAvailability(body.id, body.isAvailable, body.updatedAt);
       return NextResponse.json({ 
         success: res.success, 
         availabilityMap: res.availabilityMap,
-        deletedIds: getDeletedMenuIds(),
+        deletedIds: await getDeletedMenuIds(),
       });
     }
 
@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Nama, kategori, dan harga wajib diisi' }, { status: 400 });
     }
 
-    const newItem = createMenuItem({
+    const newItem = await createMenuItem({
       name: name.trim(),
       category: category.trim(),
       price: Number(price),
@@ -124,8 +124,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ 
       success: true, 
       data: newItem,
-      deletedIds: getDeletedMenuIds(),
-      overrides: getMenuOverrides(),
+      deletedIds: await getDeletedMenuIds(),
+      overrides: await getMenuOverrides(),
     });
   } catch (err) {
     console.error('Menu POST error:', err);
@@ -155,7 +155,7 @@ export async function PUT(req: NextRequest) {
     if (isAvailable !== undefined) updates.isAvailable = !!isAvailable;
     if (options !== undefined) updates.options = options;
 
-    const updated = updateMenuItem(id, updates);
+    const updated = await updateMenuItem(id, updates);
     if (!updated) {
       return NextResponse.json({ success: false, error: 'Menu tidak ditemukan' }, { status: 404 });
     }
@@ -163,8 +163,8 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ 
       success: true, 
       data: updated,
-      deletedIds: getDeletedMenuIds(),
-      overrides: getMenuOverrides(),
+      deletedIds: await getDeletedMenuIds(),
+      overrides: await getMenuOverrides(),
     });
   } catch (err) {
     console.error('Menu PUT error:', err);
@@ -189,12 +189,12 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'ID menu wajib disertakan' }, { status: 400 });
     }
 
-    const ok = deleteMenuItem(id);
+    const ok = await deleteMenuItem(id);
     return NextResponse.json({ 
       success: ok,
       deletedId: id,
-      deletedIds: getDeletedMenuIds(),
-      overrides: getMenuOverrides(),
+      deletedIds: await getDeletedMenuIds(),
+      overrides: await getMenuOverrides(),
     });
   } catch (err) {
     console.error('Menu DELETE error:', err);

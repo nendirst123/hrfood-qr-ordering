@@ -9,7 +9,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    let order = getOrderById(params.id);
+    let order = await getOrderById(params.id);
 
     // Self-healing: jika instance serverless baru belum memiliki order di /tmp, pulihkan dari header fallback
     if (!order) {
@@ -18,7 +18,7 @@ export async function GET(
         try {
           const parsed = JSON.parse(decodeURIComponent(fallbackHeader));
           if (parsed && parsed.id === params.id) {
-            syncOrders([parsed]);
+            await syncOrders([parsed]);
             order = parsed;
           }
         } catch (e) {
@@ -48,7 +48,7 @@ export async function PATCH(
     const body = await request.json();
     const { status, isPaid } = body;
 
-    const updated = updateOrderStatus(params.id, status, isPaid);
+    const updated = await updateOrderStatus(params.id, status, isPaid);
     if (!updated) {
       return NextResponse.json({ success: false, error: 'Pesanan tidak ditemukan' }, { status: 404 });
     }

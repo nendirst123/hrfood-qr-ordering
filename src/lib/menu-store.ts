@@ -1,22 +1,11 @@
-import fs from 'fs';
-import path from 'path';
+import { kvGet, kvSet } from './db';
 import { MENU_ITEMS } from '@/data/menu';
 import { MenuItem } from '@/types/order';
 
-const isVercel = process.env.VERCEL === '1';
-const DATA_DIR = isVercel ? '/tmp/data' : path.join(process.cwd(), 'data');
-
-const MENU_FILE = path.join(DATA_DIR, 'menu.json');
-const BUNDLED_MENU_FILE = path.join(process.cwd(), 'data', 'menu.json');
-
-const AVAILABILITY_FILE = path.join(DATA_DIR, 'menu_availability.json');
-const BUNDLED_AVAILABILITY_FILE = path.join(process.cwd(), 'data', 'menu_availability.json');
-
-const DELETED_IDS_FILE = path.join(DATA_DIR, 'menu_deleted_ids.json');
-const BUNDLED_DELETED_IDS_FILE = path.join(process.cwd(), 'data', 'menu_deleted_ids.json');
-
-const OVERRIDES_FILE = path.join(DATA_DIR, 'menu_custom_overrides.json');
-const BUNDLED_OVERRIDES_FILE = path.join(process.cwd(), 'data', 'menu_custom_overrides.json');
+const MENU_KEY = 'menu';
+const AVAILABILITY_KEY = 'menu_availability';
+const DELETED_IDS_KEY = 'menu_deleted_ids';
+const OVERRIDES_KEY = 'menu_overrides';
 
 export type AvailabilityEntry = {
   isAvailable: boolean;
@@ -25,113 +14,31 @@ export type AvailabilityEntry = {
 
 export type AvailabilityMap = Record<string, AvailabilityEntry>;
 
-declare global {
-  var __CACHED_MENU_ITEMS__: MenuItem[] | undefined;
-  var __MENU_AVAILABILITY_MAP__: AvailabilityMap | undefined;
-  var __DELETED_MENU_IDS__: Set<string> | undefined;
-  var __MENU_OVERRIDES__: Record<string, MenuItem> | undefined;
-}
-
-function ensureDataDir() {
-  try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-
-    // 1. Pastikan menu.json ada
-    if (!fs.existsSync(MENU_FILE)) {
-      if (fs.existsSync(BUNDLED_MENU_FILE)) {
-        const bundledContent = fs.readFileSync(BUNDLED_MENU_FILE, 'utf-8');
-        fs.writeFileSync(MENU_FILE, bundledContent, 'utf-8');
-      } else {
-        const initialMenu: MenuItem[] = MENU_ITEMS.map((item) => ({
-          ...item,
-          isAvailable: true,
-        }));
-        fs.writeFileSync(MENU_FILE, JSON.stringify(initialMenu, null, 2), 'utf-8');
-      }
-    }
-
-    // 2. Pastikan menu_availability.json ada
-    if (!fs.existsSync(AVAILABILITY_FILE)) {
-      if (fs.existsSync(BUNDLED_AVAILABILITY_FILE)) {
-        const bundledAvail = fs.readFileSync(BUNDLED_AVAILABILITY_FILE, 'utf-8');
-        fs.writeFileSync(AVAILABILITY_FILE, bundledAvail, 'utf-8');
-      } else {
-        fs.writeFileSync(AVAILABILITY_FILE, JSON.stringify({}, null, 2), 'utf-8');
-      }
-    }
-
-    // 3. Pastikan menu_deleted_ids.json ada
-    if (!fs.existsSync(DELETED_IDS_FILE)) {
-      if (fs.existsSync(BUNDLED_DELETED_IDS_FILE)) {
-        const bundled = fs.readFileSync(BUNDLED_DELETED_IDS_FILE, 'utf-8');
-        fs.writeFileSync(DELETED_IDS_FILE, bundled, 'utf-8');
-      } else {
-        fs.writeFileSync(DELETED_IDS_FILE, JSON.stringify([], null, 2), 'utf-8');
-      }
-    }
-
-    // 4. Pastikan menu_custom_overrides.json ada
-    if (!fs.existsSync(OVERRIDES_FILE)) {
-      if (fs.existsSync(BUNDLED_OVERRIDES_FILE)) {
-        const bundled = fs.readFileSync(BUNDLED_OVERRIDES_FILE, 'utf-8');
-        fs.writeFileSync(OVERRIDES_FILE, bundled, 'utf-8');
-      } else {
-        fs.writeFileSync(OVERRIDES_FILE, JSON.stringify({}, null, 2), 'utf-8');
-      }
-    }
-  } catch (err) {
-    console.warn('Filesystem access warning (Vercel serverless):', err);
-  }
-}
-
 // ----------------------------------------------------
 // Peta Ketersediaan Stok (Availability)
 // ----------------------------------------------------
-export function getAvailabilityMap(): AvailabilityMap {
-  ensureDataDir();
-  if (globalThis.__MENU_AVAILABILITY_MAP__ && Object.keys(globalThis.__MENU_AVAILABILITY_MAP__).length > 0) {
-    return globalThis.__MENU_AVAILABILITY_MAP__;
-  }
-
+export async function getAvailabilityMap(): Promise<AvailabilityMap> {
+  const parsed = await kvGet<Record<string, any>>(AVAILABILITY_KEY, {});
   const map: AvailabilityMap = {};
-  try {
-    if (fs.existsSync(AVAILABILITY_FILE)) {
-      const raw = fs.readFileSync(AVAILABILITY_FILE, 'utf-8');
-      const parsed = JSON.parse(raw || '{}');
-      Object.entries(parsed).forEach(([id, val]) => {
-        if (typeof val === 'boolean') {
-          map[id] = { isAvailable: val, updatedAt: Date.now() };
-        } else if (val && typeof val === 'object' && typeof (val as any).isAvailable === 'boolean') {
-          map[id] = {
-            isAvailable: (val as any).isAvailable,
-            updatedAt: Number((val as any).updatedAt) || Date.now(),
-          };
-        }
-      });
+  Object.entries(parsed).forEach(([id, val]) => {
+    if (typeof val === 'boolean') {
+      map[id] = { isAvailable: val, updatedAt: Date.now() };
+    } else if (val && typeof val === 'object' && typeof (val as any).isAvailable === 'boolean') {
+      map[id] = {
+        isAvailable: (val as any).isAvailable,
+        updatedAt: Number((val as any).updatedAt) || Date.now(),
+      };
     }
-  } catch (err) {
-    console.error('Failed reading availability map:', err);
-  }
-
-  globalThis.__MENU_AVAILABILITY_MAP__ = map;
+  });
   return map;
 }
 
-export function saveAvailabilityMap(map: AvailabilityMap): boolean {
-  ensureDataDir();
-  globalThis.__MENU_AVAILABILITY_MAP__ = map;
+export async function saveAvailabilityMap(map: AvailabilityMap): Promise<boolean> {
   try {
-    fs.writeFileSync(AVAILABILITY_FILE, JSON.stringify(map, null, 2), 'utf-8');
-    if (!isVercel && fs.existsSync(BUNDLED_AVAILABILITY_FILE)) {
-      try {
-        fs.writeFileSync(BUNDLED_AVAILABILITY_FILE, JSON.stringify(map, null, 2), 'utf-8');
-      } catch (e) {}
-    }
+    await kvSet(AVAILABILITY_KEY, map);
     return true;
   } catch (err) {
-    console.warn('Failed saving availability map to filesystem:', err);
+    console.warn('Failed saving availability map:', err);
     return false;
   }
 }
@@ -139,44 +46,17 @@ export function saveAvailabilityMap(map: AvailabilityMap): boolean {
 // ----------------------------------------------------
 // ID Menu yang Dihapus (Deleted Menu IDs)
 // ----------------------------------------------------
-export function getDeletedMenuIds(): string[] {
-  ensureDataDir();
-  if (globalThis.__DELETED_MENU_IDS__) {
-    return Array.from(globalThis.__DELETED_MENU_IDS__);
-  }
-
-  const set = new Set<string>();
-  try {
-    if (fs.existsSync(DELETED_IDS_FILE)) {
-      const raw = fs.readFileSync(DELETED_IDS_FILE, 'utf-8');
-      const parsed = JSON.parse(raw || '[]');
-      if (Array.isArray(parsed)) {
-        parsed.forEach((id) => set.add(id));
-      }
-    }
-  } catch (err) {
-    console.error('Failed reading deleted menu ids:', err);
-  }
-
-  globalThis.__DELETED_MENU_IDS__ = set;
-  return Array.from(set);
+export async function getDeletedMenuIds(): Promise<string[]> {
+  const parsed = await kvGet<string[]>(DELETED_IDS_KEY, []);
+  return Array.isArray(parsed) ? parsed : [];
 }
 
-export function saveDeletedMenuIds(ids: string[]): boolean {
-  ensureDataDir();
-  const set = new Set(ids);
-  globalThis.__DELETED_MENU_IDS__ = set;
-  const arr = Array.from(set);
+export async function saveDeletedMenuIds(ids: string[]): Promise<boolean> {
   try {
-    fs.writeFileSync(DELETED_IDS_FILE, JSON.stringify(arr, null, 2), 'utf-8');
-    if (!isVercel && fs.existsSync(BUNDLED_DELETED_IDS_FILE)) {
-      try {
-        fs.writeFileSync(BUNDLED_DELETED_IDS_FILE, JSON.stringify(arr, null, 2), 'utf-8');
-      } catch (e) {}
-    }
+    await kvSet(DELETED_IDS_KEY, Array.from(new Set(ids)));
     return true;
   } catch (err) {
-    console.warn('Failed saving deleted menu ids to filesystem:', err);
+    console.warn('Failed saving deleted menu ids:', err);
     return false;
   }
 }
@@ -184,42 +64,17 @@ export function saveDeletedMenuIds(ids: string[]): boolean {
 // ----------------------------------------------------
 // Kustomisasi & Edit Menu (Overrides)
 // ----------------------------------------------------
-export function getMenuOverrides(): Record<string, MenuItem> {
-  ensureDataDir();
-  if (globalThis.__MENU_OVERRIDES__) {
-    return globalThis.__MENU_OVERRIDES__;
-  }
-
-  const overrides: Record<string, MenuItem> = {};
-  try {
-    if (fs.existsSync(OVERRIDES_FILE)) {
-      const raw = fs.readFileSync(OVERRIDES_FILE, 'utf-8');
-      const parsed = JSON.parse(raw || '{}');
-      if (parsed && typeof parsed === 'object') {
-        Object.assign(overrides, parsed);
-      }
-    }
-  } catch (err) {
-    console.error('Failed reading menu overrides:', err);
-  }
-
-  globalThis.__MENU_OVERRIDES__ = overrides;
-  return overrides;
+export async function getMenuOverrides(): Promise<Record<string, MenuItem>> {
+  const parsed = await kvGet<Record<string, MenuItem>>(OVERRIDES_KEY, {});
+  return parsed && typeof parsed === 'object' ? parsed : {};
 }
 
-export function saveMenuOverrides(overrides: Record<string, MenuItem>): boolean {
-  ensureDataDir();
-  globalThis.__MENU_OVERRIDES__ = overrides;
+export async function saveMenuOverrides(overrides: Record<string, MenuItem>): Promise<boolean> {
   try {
-    fs.writeFileSync(OVERRIDES_FILE, JSON.stringify(overrides, null, 2), 'utf-8');
-    if (!isVercel && fs.existsSync(BUNDLED_OVERRIDES_FILE)) {
-      try {
-        fs.writeFileSync(BUNDLED_OVERRIDES_FILE, JSON.stringify(overrides, null, 2), 'utf-8');
-      } catch (e) {}
-    }
+    await kvSet(OVERRIDES_KEY, overrides);
     return true;
   } catch (err) {
-    console.warn('Failed saving menu overrides to filesystem:', err);
+    console.warn('Failed saving menu overrides:', err);
     return false;
   }
 }
@@ -227,26 +82,20 @@ export function saveMenuOverrides(overrides: Record<string, MenuItem>): boolean 
 // ----------------------------------------------------
 // Ambil Seluruh Menu dengan Integrasi Override & Deleted
 // ----------------------------------------------------
-export function getMenuWithAvailability(): MenuItem[] {
-  ensureDataDir();
-  let baseItems: MenuItem[] = [];
+export async function getMenuWithAvailability(): Promise<MenuItem[]> {
+  const [baseItemsRaw, deletedIdsArr, overrides, availabilityMap] = await Promise.all([
+    kvGet<MenuItem[]>(MENU_KEY, []),
+    getDeletedMenuIds(),
+    getMenuOverrides(),
+    getAvailabilityMap(),
+  ]);
 
-  try {
-    if (fs.existsSync(MENU_FILE)) {
-      const raw = fs.readFileSync(MENU_FILE, 'utf-8');
-      baseItems = JSON.parse(raw || '[]');
-    }
-  } catch (err) {
-    console.error('Failed reading menu.json, using fallback:', err);
-  }
-
+  let baseItems: MenuItem[] = baseItemsRaw;
   if (!baseItems || baseItems.length === 0) {
     baseItems = MENU_ITEMS;
   }
 
-  const deletedIds = new Set(getDeletedMenuIds());
-  const overrides = getMenuOverrides();
-  const availabilityMap = getAvailabilityMap();
+  const deletedIds = new Set(deletedIdsArr);
 
   // 1. Filter out deleted items
   const activeBase = baseItems.filter((item) => !deletedIds.has(item.id));
@@ -286,34 +135,26 @@ export function getMenuWithAvailability(): MenuItem[] {
     }
   });
 
-  globalThis.__CACHED_MENU_ITEMS__ = mergedItems;
   return mergedItems;
 }
 
-// Simpan seluruh menu ke disk jika memungkinkan
-function saveMenuItems(items: MenuItem[]): boolean {
-  ensureDataDir();
-  globalThis.__CACHED_MENU_ITEMS__ = items;
+// Simpan seluruh menu (base)
+async function saveMenuItems(items: MenuItem[]): Promise<boolean> {
   try {
-    fs.writeFileSync(MENU_FILE, JSON.stringify(items, null, 2), 'utf-8');
-    if (!isVercel && fs.existsSync(BUNDLED_MENU_FILE)) {
-      try {
-        fs.writeFileSync(BUNDLED_MENU_FILE, JSON.stringify(items, null, 2), 'utf-8');
-      } catch (e) {}
-    }
+    await kvSet(MENU_KEY, items);
     return true;
   } catch (err) {
-    console.warn('Failed saving menu.json to filesystem, kept in memory:', err);
-    return true;
+    console.warn('Failed saving menu items:', err);
+    return false;
   }
 }
 
 // ----------------------------------------------------
-// CRUD Menu dengan Jaminan Persistensi
+// CRUD Menu
 // ----------------------------------------------------
 
 // 1. Tambah Menu Baru
-export function createMenuItem(item: Omit<MenuItem, 'id'> & { id?: string }): MenuItem {
+export async function createMenuItem(item: Omit<MenuItem, 'id'> & { id?: string }): Promise<MenuItem> {
   const id = item.id || `hr-custom-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
   const now = Date.now();
 
@@ -325,29 +166,29 @@ export function createMenuItem(item: Omit<MenuItem, 'id'> & { id?: string }): Me
   };
 
   // Pastikan tidak ada di daftar deletedIds
-  const deleted = getDeletedMenuIds().filter((dId) => dId !== id);
-  saveDeletedMenuIds(deleted);
+  const deleted = (await getDeletedMenuIds()).filter((dId) => dId !== id);
+  await saveDeletedMenuIds(deleted);
 
   // Simpan ke overrides
-  const overrides = getMenuOverrides();
+  const overrides = await getMenuOverrides();
   overrides[id] = newItem;
-  saveMenuOverrides(overrides);
+  await saveMenuOverrides(overrides);
 
   // Simpan ketersediaan
-  const map = getAvailabilityMap();
+  const map = await getAvailabilityMap();
   map[id] = { isAvailable: newItem.isAvailable !== false, updatedAt: now };
-  saveAvailabilityMap(map);
+  await saveAvailabilityMap(map);
 
   // Dapatkan menu segar
-  const allItems = getMenuWithAvailability();
-  saveMenuItems(allItems);
+  const allItems = await getMenuWithAvailability();
+  await saveMenuItems(allItems);
 
   return newItem;
 }
 
 // 2. Update Menu (Ganti Harga, Nama, Deskripsi, Kategori, Foto)
-export function updateMenuItem(id: string, updates: Partial<MenuItem>): MenuItem | null {
-  const allItems = getMenuWithAvailability();
+export async function updateMenuItem(id: string, updates: Partial<MenuItem>): Promise<MenuItem | null> {
+  const allItems = await getMenuWithAvailability();
   const existing = allItems.find((m) => m.id === id);
   if (!existing && !updates.name) return null;
 
@@ -360,67 +201,67 @@ export function updateMenuItem(id: string, updates: Partial<MenuItem>): MenuItem
   } as MenuItem;
 
   // Pastikan ID tidak ada di deleted
-  const deleted = getDeletedMenuIds().filter((dId) => dId !== id);
-  saveDeletedMenuIds(deleted);
+  const deleted = (await getDeletedMenuIds()).filter((dId) => dId !== id);
+  await saveDeletedMenuIds(deleted);
 
   // Simpan ke overrides
-  const overrides = getMenuOverrides();
+  const overrides = await getMenuOverrides();
   overrides[id] = updatedItem;
-  saveMenuOverrides(overrides);
+  await saveMenuOverrides(overrides);
 
   // Refresh menu
-  const refreshed = getMenuWithAvailability();
-  saveMenuItems(refreshed);
+  const refreshed = await getMenuWithAvailability();
+  await saveMenuItems(refreshed);
 
   return updatedItem;
 }
 
 // 3. Hapus Menu Permanen
-export function deleteMenuItem(id: string): boolean {
+export async function deleteMenuItem(id: string): Promise<boolean> {
   // Tambahkan ke deletedIds
-  const deleted = new Set(getDeletedMenuIds());
+  const deleted = new Set(await getDeletedMenuIds());
   deleted.add(id);
-  saveDeletedMenuIds(Array.from(deleted));
+  await saveDeletedMenuIds(Array.from(deleted));
 
   // Hapus dari overrides
-  const overrides = getMenuOverrides();
+  const overrides = await getMenuOverrides();
   if (overrides[id]) {
     delete overrides[id];
-    saveMenuOverrides(overrides);
+    await saveMenuOverrides(overrides);
   }
 
   // Hapus dari availability
-  const map = getAvailabilityMap();
+  const map = await getAvailabilityMap();
   if (map[id]) {
     delete map[id];
-    saveAvailabilityMap(map);
+    await saveAvailabilityMap(map);
   }
 
   // Refresh menu
-  const refreshed = getMenuWithAvailability();
-  saveMenuItems(refreshed);
+  const refreshed = await getMenuWithAvailability();
+  await saveMenuItems(refreshed);
 
   return true;
 }
 
 // 4. Pulihkan Menu yang Pernah Dihapus (Restore)
-export function restoreMenuItem(id: string): MenuItem | null {
-  const deleted = getDeletedMenuIds().filter((dId) => dId !== id);
-  saveDeletedMenuIds(deleted);
+export async function restoreMenuItem(id: string): Promise<MenuItem | null> {
+  const deleted = (await getDeletedMenuIds()).filter((dId) => dId !== id);
+  await saveDeletedMenuIds(deleted);
 
-  const refreshed = getMenuWithAvailability();
-  saveMenuItems(refreshed);
+  const refreshed = await getMenuWithAvailability();
+  await saveMenuItems(refreshed);
 
   return refreshed.find((m) => m.id === id) || null;
 }
 
 // 5. Toggle Ketersediaan Stok Satuan
-export function setMenuItemAvailability(
+export async function setMenuItemAvailability(
   id: string,
   isAvailable: boolean,
   clientUpdatedAt?: number
-): { success: boolean; availabilityMap: AvailabilityMap } {
-  const map = getAvailabilityMap();
+): Promise<{ success: boolean; availabilityMap: AvailabilityMap }> {
+  const map = await getAvailabilityMap();
   const timestamp = clientUpdatedAt || Date.now();
 
   map[id] = {
@@ -428,15 +269,15 @@ export function setMenuItemAvailability(
     updatedAt: timestamp,
   };
 
-  saveAvailabilityMap(map);
+  await saveAvailabilityMap(map);
   return { success: true, availabilityMap: map };
 }
 
 // 6. Sinkronisasi Ketersediaan Stok Massal
-export function syncMenuAvailability(
+export async function syncMenuAvailability(
   incoming: Record<string, boolean | { isAvailable: boolean; updatedAt?: number }>
-): AvailabilityMap {
-  const currentMap = getAvailabilityMap();
+): Promise<AvailabilityMap> {
+  const currentMap = await getAvailabilityMap();
   let hasChanges = false;
 
   Object.entries(incoming).forEach(([id, val]) => {
@@ -457,29 +298,29 @@ export function syncMenuAvailability(
   });
 
   if (hasChanges) {
-    saveAvailabilityMap(currentMap);
+    await saveAvailabilityMap(currentMap);
   }
 
   return currentMap;
 }
 
-// 7. Sinkronisasi Komprehensif Perubahan Menu (Self-Healing untuk Vercel Serverless)
-export function syncMenuData(incoming: {
+// 7. Sinkronisasi Komprehensif Perubahan Menu
+export async function syncMenuData(incoming: {
   deletedIds?: string[];
   overrides?: Record<string, MenuItem>;
   syncAvailability?: Record<string, any>;
-}): {
+}): Promise<{
   items: MenuItem[];
   availabilityMap: AvailabilityMap;
   deletedIds: string[];
   overrides: Record<string, MenuItem>;
-} {
+}> {
   let hasDeletedChanges = false;
   let hasOverrideChanges = false;
 
   // Sync deleted IDs
   if (Array.isArray(incoming.deletedIds) && incoming.deletedIds.length > 0) {
-    const currentDeleted = new Set(getDeletedMenuIds());
+    const currentDeleted = new Set(await getDeletedMenuIds());
     incoming.deletedIds.forEach((id) => {
       if (!currentDeleted.has(id)) {
         currentDeleted.add(id);
@@ -487,13 +328,13 @@ export function syncMenuData(incoming: {
       }
     });
     if (hasDeletedChanges) {
-      saveDeletedMenuIds(Array.from(currentDeleted));
+      await saveDeletedMenuIds(Array.from(currentDeleted));
     }
   }
 
   // Sync overrides
   if (incoming.overrides && typeof incoming.overrides === 'object') {
-    const currentOverrides = getMenuOverrides();
+    const currentOverrides = await getMenuOverrides();
     Object.entries(incoming.overrides).forEach(([id, incomingItem]) => {
       if (!id || !incomingItem) return;
       const existing = currentOverrides[id];
@@ -513,20 +354,20 @@ export function syncMenuData(incoming: {
       }
     });
     if (hasOverrideChanges) {
-      saveMenuOverrides(currentOverrides);
+      await saveMenuOverrides(currentOverrides);
     }
   }
 
   // Sync availability
   if (incoming.syncAvailability) {
-    syncMenuAvailability(incoming.syncAvailability);
+    await syncMenuAvailability(incoming.syncAvailability);
   }
 
-  const items = getMenuWithAvailability();
-  return {
-    items,
-    availabilityMap: getAvailabilityMap(),
-    deletedIds: getDeletedMenuIds(),
-    overrides: getMenuOverrides(),
-  };
+  const [items, availabilityMap, deletedIds, overrides] = await Promise.all([
+    getMenuWithAvailability(),
+    getAvailabilityMap(),
+    getDeletedMenuIds(),
+    getMenuOverrides(),
+  ]);
+  return { items, availabilityMap, deletedIds, overrides };
 }

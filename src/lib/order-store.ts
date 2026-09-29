@@ -1,36 +1,9 @@
-import fs from 'fs';
-import path from 'path';
+import { kvGet, kvSet } from './db';
 import { Order, OrderStatus, PaymentMethod, CartItem, OrderType, MenuItem } from '@/types/order';
 import { getMenuWithAvailability } from './menu-store';
 import { validatePromo } from './promo-store';
 
-const isVercel = process.env.VERCEL === '1';
-const DATA_DIR = isVercel ? '/tmp/data' : path.join(process.cwd(), 'data');
-const DATA_FILE = path.join(DATA_DIR, 'orders.json');
-const BUNDLED_DATA_FILE = path.join(process.cwd(), 'data', 'orders.json');
-
-declare global {
-  var __CACHED_ORDERS__: Order[] | undefined;
-}
-
-// Pastikan direktori data ada dan aman di Vercel Serverless
-function ensureDataDir() {
-  try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-    if (!fs.existsSync(DATA_FILE)) {
-      if (fs.existsSync(BUNDLED_DATA_FILE)) {
-        const bundledContent = fs.readFileSync(BUNDLED_DATA_FILE, 'utf-8');
-        fs.writeFileSync(DATA_FILE, bundledContent, 'utf-8');
-      } else {
-        fs.writeFileSync(DATA_FILE, JSON.stringify([], null, 2), 'utf-8');
-      }
-    }
-  } catch (err) {
-    console.warn('Filesystem access warning (Vercel serverless):', err);
-  }
-}
+const ORDERS_KEY = 'orders';
 
 // Helper format tanggal dalam timezone Asia/Jakarta (WIB)
 export function getWibDateString(date: Date = new Date()): string {
@@ -45,43 +18,22 @@ export function getOrderWibDateString(isoString: string): string {
   }
 }
 
-export function getAllOrders(filterDate?: string): Order[] {
-  ensureDataDir();
-  let orders: Order[] = [];
+async function loadOrders(): Promise<Order[]> {
+  const parsed = await kvGet<Order[]>(ORDERS_KEY, []);
+  // Preserve existing data: ensure backward-compatible defaults
+  return parsed.map(o => ({
+    ...o,
+    orderType: o.orderType || 'dine_in',
+    deliveryFee: o.deliveryFee || 0,
+  }));
+}
 
-  try {
-    if (fs.existsSync(DATA_FILE)) {
-      const raw = fs.readFileSync(DATA_FILE, 'utf-8');
-      const parsed: Order[] = JSON.parse(raw || '[]');
-      
-      // Preserve existing data: ensure backward-compatible defaults
-      orders = parsed.map(o => ({
-        ...o,
-        orderType: o.orderType || 'dine_in',
-        deliveryFee: o.deliveryFee || 0,
-      }));
+async function saveOrders(orders: Order[]): Promise<void> {
+  await kvSet(ORDERS_KEY, orders);
+}
 
-      // Merge with global cached orders if any newer in memory
-      if (globalThis.__CACHED_ORDERS__ && globalThis.__CACHED_ORDERS__.length > 0) {
-        const orderMap = new Map<string, Order>();
-        orders.forEach(o => orderMap.set(o.id, o));
-        globalThis.__CACHED_ORDERS__.forEach(o => {
-          const existing = orderMap.get(o.id);
-          if (!existing || new Date(o.updatedAt).getTime() >= new Date(existing.updatedAt).getTime()) {
-            orderMap.set(o.id, o);
-          }
-        });
-        orders = Array.from(orderMap.values());
-      }
-
-      globalThis.__CACHED_ORDERS__ = orders;
-    } else if (globalThis.__CACHED_ORDERS__) {
-      orders = globalThis.__CACHED_ORDERS__;
-    }
-  } catch (err) {
-    console.error('Failed reading orders file, using in-memory cache:', err);
-    orders = globalThis.__CACHED_ORDERS__ || [];
-  }
+export async function getAllOrders(filterDate?: string): Promise<Order[]> {
+  let orders = await loadOrders();
 
   // Filter Tanggal berdasarkan Timezone Resto (Asia/Jakarta / WIB)
   if (filterDate && filterDate !== 'all') {
@@ -104,12 +56,12 @@ export function getAllOrders(filterDate?: string): Order[] {
   return orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
-export function getOrderById(id: string): Order | null {
-  const orders = getAllOrders();
+export async function getOrderById(id: string): Promise<Order | null> {
+  const orders = await getAllOrders();
   return orders.find(o => o.id === id) || null;
 }
 
-export function createOrder(payload: {
+export async function createOrder(payload: {
   tableNumber?: string;
   customerName: string;
   customerPhone?: string;
@@ -126,14 +78,13 @@ export function createOrder(payload: {
   isPaid?: boolean;
   discountCode?: string;
   discountAmount?: number;
-}): Order {
-  ensureDataDir();
-  const orders = getAllOrders();
+}): Promise<Order> {
+  const orders = await loadOrders();
 
   // === KEAMANAN: harga selalu dihitung dari data menu di server ===
   // unitPrice / basePrice / extraPrice dari client DIABAIKAN agar tidak bisa dimanipulasi.
   const menuMap = new Map<string, MenuItem>();
-  for (const m of getMenuWithAvailability()) menuMap.set(m.id, m);
+  for (const m of await getMenuWithAvailability()) menuMap.set(m.id, m);
 
   const serverItems: CartItem[] = payload.items.map((item) => {
     const menuItem = menuMap.get(item.itemId);
@@ -180,7 +131,7 @@ export function createOrder(payload: {
   let discountAmount = 0;
   const discountCode = payload.discountCode?.trim() || undefined;
   if (discountCode) {
-    const promoCheck = validatePromo(discountCode, subtotal);
+    const promoCheck = await validatePromo(discountCode, subtotal);
     if (!promoCheck.valid) {
       throw new Error(promoCheck.message || 'Kode promo tidak valid.');
     }
@@ -240,18 +191,12 @@ export function createOrder(payload: {
   };
 
   orders.unshift(newOrder);
-  globalThis.__CACHED_ORDERS__ = orders;
-  try {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(orders, null, 2), 'utf-8');
-  } catch (err) {
-    console.warn('Failed writing orders to filesystem, kept in memory:', err);
-  }
+  await saveOrders(orders);
   return newOrder;
 }
 
-export function updateOrderStatus(id: string, status: OrderStatus, isPaid?: boolean): Order | null {
-  ensureDataDir();
-  const orders = getAllOrders();
+export async function updateOrderStatus(id: string, status: OrderStatus, isPaid?: boolean): Promise<Order | null> {
+  const orders = await loadOrders();
   const index = orders.findIndex(o => o.id === id);
   if (index === -1) return null;
 
@@ -261,35 +206,15 @@ export function updateOrderStatus(id: string, status: OrderStatus, isPaid?: bool
   }
   orders[index].updatedAt = new Date().toISOString();
 
-  globalThis.__CACHED_ORDERS__ = orders;
-  try {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(orders, null, 2), 'utf-8');
-  } catch (err) {
-    console.warn('Failed updating orders to filesystem, kept in memory:', err);
-  }
+  await saveOrders(orders);
   return orders[index];
 }
 
-export function resetAllOrders(): { success: boolean; backupOrders: Order[]; count: number } {
-  ensureDataDir();
-  const previousOrders = getAllOrders();
+export async function resetAllOrders(): Promise<{ success: boolean; backupOrders: Order[]; count: number }> {
+  const previousOrders = await loadOrders();
 
-  // Buat cadangan lokal jika tidak di serverless
-  try {
-    const backupFileName = `backup_orders_${Date.now()}.json`;
-    const backupFilePath = path.join(DATA_DIR, backupFileName);
-    fs.writeFileSync(backupFilePath, JSON.stringify(previousOrders, null, 2), 'utf-8');
-  } catch (err) {
-    console.warn('Failed writing backup file to disk:', err);
-  }
-
-  // Kosongkan orders
-  globalThis.__CACHED_ORDERS__ = [];
-  try {
-    fs.writeFileSync(DATA_FILE, JSON.stringify([], null, 2), 'utf-8');
-  } catch (err) {
-    console.warn('Failed resetting orders in filesystem, reset in memory:', err);
-  }
+  // Kosongkan orders (backup dikembalikan lewat respons API)
+  await saveOrders([]);
 
   return {
     success: true,
@@ -298,27 +223,23 @@ export function resetAllOrders(): { success: boolean; backupOrders: Order[]; cou
   };
 }
 
-// Sinkronisasi pesanan dari klien (Self-healing Serverless Persistence)
-export function syncOrders(incomingOrders: Order[]): Order[] {
-  ensureDataDir();
-  const currentOrders = getAllOrders();
+// Sinkronisasi pesanan dari klien (fallback kompatibilitas)
+export async function syncOrders(incomingOrders: Order[]): Promise<Order[]> {
+  const currentOrders = await loadOrders();
   const orderMap = new Map<string, Order>();
 
   currentOrders.forEach(o => orderMap.set(o.id, o));
 
-  let hasChanges = false;
   incomingOrders.forEach(incoming => {
     if (!incoming || !incoming.id) return;
     const existing = orderMap.get(incoming.id);
     if (!existing) {
       orderMap.set(incoming.id, incoming);
-      hasChanges = true;
     } else {
       const incomingTime = new Date(incoming.updatedAt || incoming.createdAt).getTime();
       const existingTime = new Date(existing.updatedAt || existing.createdAt).getTime();
       if (incomingTime > existingTime) {
         orderMap.set(incoming.id, incoming);
-        hasChanges = true;
       }
     }
   });
@@ -327,15 +248,6 @@ export function syncOrders(incomingOrders: Order[]): Order[] {
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
 
-  if (hasChanges) {
-    globalThis.__CACHED_ORDERS__ = merged;
-    try {
-      fs.writeFileSync(DATA_FILE, JSON.stringify(merged, null, 2), 'utf-8');
-    } catch (err) {
-      console.warn('Failed saving synced orders to filesystem:', err);
-    }
-  }
-
+  await saveOrders(merged);
   return merged;
 }
-

@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     const orderType = searchParams.get('type') as OrderType | null;
     const date = searchParams.get('date');
 
-    let orders = getAllOrders(date || undefined);
+    let orders = await getAllOrders(date || undefined);
     if (table) {
       orders = orders.filter(o => o.tableNumber === table.padStart(2, '0'));
     }
@@ -68,11 +68,11 @@ export async function POST(request: NextRequest) {
     // KEAMANAN: sinkronisasi stok dari client hanya diterima dari admin/dapur.
     // Pelanggan tidak boleh mengubah status ketersediaan menu.
     if (isAdminRequest(request) && clientAvailability && typeof clientAvailability === 'object') {
-      syncMenuAvailability(clientAvailability);
+      await syncMenuAvailability(clientAvailability);
     }
 
     // Validasi menu yang sedang habis stok
-    const availabilityMap = getAvailabilityMap();
+    const availabilityMap = await getAvailabilityMap();
     const soldOutCartItems = items.filter((cartItem: CartItem) => {
       const entry = availabilityMap[cartItem.itemId];
       return entry && entry.isAvailable === false;
@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const newOrder = createOrder({
+    const newOrder = await createOrder({
       orderType: safeOrderType,
       tableNumber,
       customerName,

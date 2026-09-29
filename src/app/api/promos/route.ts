@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
     if (denied) return denied;
   }
 
-  const all = getAllPromos();
+  const all = await getAllPromos();
   const result = showAll ? all : all.filter(p => p.isActive);
 
   return NextResponse.json({ success: true, data: result });
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
     // 1. Validasi Kupon di Checkout (publik — dipakai halaman pemesanan)
     if (body.action === 'validate') {
       const { code, subtotal } = body;
-      const res = validatePromo(code, Number(subtotal) || 0);
+      const res = await validatePromo(code, Number(subtotal) || 0);
       return NextResponse.json({ success: true, ...res });
     }
 
@@ -37,11 +37,11 @@ export async function POST(req: NextRequest) {
 
     // 2. Toggle Status Aktif Kupon
     if (body.action === 'toggle' && body.id) {
-      const all = getAllPromos();
+      const all = await getAllPromos();
       const target = all.find(p => p.id === body.id);
       if (!target) return NextResponse.json({ success: false, error: 'Promo tidak ditemukan' }, { status: 404 });
       target.isActive = !target.isActive;
-      upsertPromo(target);
+      await upsertPromo(target);
       return NextResponse.json({ success: true, data: target });
     }
 
@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Kode kupon, judul, dan nilai diskon wajib diisi' }, { status: 400 });
     }
 
-    const promo = upsertPromo({
+    const promo = await upsertPromo({
       id: body.id || `promo-${Date.now()}`,
       code: code.trim().toUpperCase(),
       title: title.trim(),
@@ -78,7 +78,7 @@ export async function DELETE(req: NextRequest) {
     const id = searchParams.get('id');
     if (!id) return NextResponse.json({ success: false, error: 'ID kupon wajib diisi' }, { status: 400 });
 
-    const ok = deletePromo(id);
+    const ok = await deletePromo(id);
     return NextResponse.json({ success: ok });
   } catch (err) {
     console.error('Delete promo error:', err);
