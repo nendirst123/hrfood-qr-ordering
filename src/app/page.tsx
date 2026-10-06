@@ -97,6 +97,7 @@ function OrderingAppContent() {
   // Filter & Search
   const [selectedCategory, setSelectedCategory] = useState<string>('Semua');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [showSoldOut, setShowSoldOut] = useState(false);
 
   // Cart & Modal
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -386,9 +387,11 @@ function OrderingAppContent() {
       const matchCategory = selectedCategory === 'Semua' || item.category === selectedCategory;
       const matchSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           item.description.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchCategory && matchSearch;
+      return matchCategory && matchSearch && (showSoldOut || (item.isAvailable !== false && (item.stock == null || item.stock > 0)));
     });
-  }, [menuList, selectedCategory, searchQuery]);
+  }, [menuList, selectedCategory, searchQuery, showSoldOut]);
+
+  const heroItem = menuList.find((item) => item.id === 'hr-sayur-10' && item.isAvailable !== false && (item.stock == null || item.stock > 0));
 
   // Open Add Product Modal
   const handleOpenProduct = (item: MenuItem) => {
@@ -674,10 +677,8 @@ function OrderingAppContent() {
             />
           </div>
 
-          {/* Theme Toggle & Mode Switcher Button */}
+          {/* Cart & Table Button */}
           <div className="flex items-center gap-1.5">
-            <ThemeToggle />
-
             {ENABLE_TABLE_ORDERING && orderType === 'dine_in' && (
               <button
                 onClick={() => setIsTableModalOpen(true)}
@@ -688,25 +689,17 @@ function OrderingAppContent() {
               </button>
             )}
 
-            {orderType === 'delivery' && (
-              <button
-                onClick={() => setIsCartOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 text-xs font-semibold hover:bg-purple-100 dark:hover:bg-purple-900/50 transition shadow-sm"
-              >
-                <Bike className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
-                <span>Pesan Antar</span>
-              </button>
-            )}
-
-            {orderType === 'takeaway' && (
-              <button
-                onClick={() => setIsCartOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-semibold hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition shadow-sm"
-              >
-                <Package className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span>Bawa Pulang</span>
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => setIsCartOpen(true)}
+              aria-label={`Buka keranjang, ${totalItemCount} item`}
+              className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+            >
+              <ShoppingBag className="h-5 w-5" />
+              <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-red-600 px-1 text-center text-[10px] font-bold leading-4 text-white">
+                {totalItemCount}
+              </span>
+            </button>
           </div>
         </div>
 
@@ -787,101 +780,34 @@ function OrderingAppContent() {
 
       {/* Banner Promo Hero - Menu Baru */}
       <div className="p-4 space-y-3">
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-amber-600 via-rose-700 to-red-800 p-4 text-white shadow-lg border border-amber-500/30">
-          <div className="absolute -top-12 -right-12 w-40 h-40 bg-amber-400/20 rounded-full blur-2xl pointer-events-none" />
-          
-          <div className="relative z-10 flex items-center justify-between gap-3">
-            <div className="flex-1 min-w-0">
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black tracking-wide uppercase mb-1.5 shadow-sm">
-                <Sparkles className="w-3 h-3 text-red-600 fill-red-600" /> MENU BARU
-              </span>
-              <h2 className="text-base sm:text-lg font-black leading-tight text-white drop-shadow-sm">
-                Telur Dadar Krispi
-              </h2>
-              <p className="text-[11px] text-rose-100 line-clamp-3 mt-1 leading-snug">
-                Perpaduan telur dadar renyah gurih dengan taburan bawang kremes, sambal khas HR FOOD, lalapan segar, dan nasi hangat. Sederhana tapi selalu bikin nagih!
-              </p>
-              
-              {(() => {
-                const heroItem = menuList.find((m) => m.id === 'hr-sayur-10') || menuList[0];
-                const isHeroAvailable = heroItem?.isAvailable !== false;
-
-                return (
-                  <div className="mt-3 flex items-center gap-2">
-                    <div className="text-xs font-black text-amber-300 bg-black/40 px-2.5 py-1 rounded-lg border border-amber-400/40">
-                      Cuma Rp 12.000
-                    </div>
-                    {isHeroAvailable ? (
-                      <button
-                        onClick={() => handleOpenProduct(heroItem)}
-                        className="px-3.5 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 active:scale-95 text-slate-950 text-xs font-black transition shadow-md flex items-center gap-1"
-                      >
-                        <span>Pesan Sekarang</span>
-                        <ArrowRight className="w-3 h-3" />
-                      </button>
-                    ) : (
-                      <span className="px-3.5 py-1 rounded-lg bg-red-600/90 text-white text-xs font-black shadow-md flex items-center gap-1 cursor-not-allowed">
-                        <span>Stok Habis</span>
-                      </span>
-                    )}
-                  </div>
-                );
-              })()}
+        {heroItem && (
+          <div className="flex items-center gap-3 rounded-2xl bg-gradient-to-br from-amber-600 via-rose-700 to-red-800 p-3 text-white">
+            <div className="min-w-0 flex-1">
+              <span className="text-[10px] font-bold uppercase text-amber-200">Menu Baru</span>
+              <h2 className="text-sm font-bold">{heroItem.name}</h2>
+              <p className="mt-1 text-xs text-rose-100">Rp {heroItem.price.toLocaleString('id-ID')}</p>
+              <button
+                type="button"
+                onClick={() => handleOpenProduct(heroItem)}
+                className="mt-2 inline-flex items-center gap-1 rounded-lg bg-amber-400 px-3 py-1.5 text-xs font-bold text-slate-950"
+              >
+                Pesan Sekarang <ArrowRight className="h-3 w-3" />
+              </button>
             </div>
-
-            {/* Poster / Dish Preview Image */}
-            {(() => {
-              const heroItem = menuList.find((m) => m.id === 'hr-sayur-10') || menuList[0];
-              const isHeroAvailable = heroItem?.isAvailable !== false;
-
-              return (
-                <div 
-                  onClick={() => {
-                    if (isHeroAvailable) handleOpenProduct(heroItem);
-                  }}
-                  className={`relative w-28 h-28 sm:w-32 sm:h-32 rounded-2xl overflow-hidden shadow-xl border-2 shrink-0 aspect-square transition ${
-                    isHeroAvailable
-                      ? 'border-amber-300/80 cursor-pointer group'
-                      : 'border-red-400/80 cursor-not-allowed opacity-90'
-                  }`}
-                >
-                  <img
-                    src="/menu-telur-dadar-krispi.jpg"
-                    alt="Telur Dadar Krispi - Menu Baru HR Food"
-                    className={`w-full h-full object-cover transition-transform duration-300 ${
-                      isHeroAvailable ? 'group-hover:scale-105' : 'grayscale'
-                    }`}
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent flex items-end justify-center pb-1">
-                    <span className={`text-[9px] font-black uppercase tracking-tight px-1.5 py-0.5 rounded ${
-                      isHeroAvailable ? 'text-amber-300 bg-black/60 backdrop-blur-xs' : 'text-white bg-red-600/90'
-                    }`}>
-                      {isHeroAvailable ? 'Renyah • Komplit' : '✕ Stok Habis'}
-                    </span>
-                  </div>
-                </div>
-              );
-            })()}
+            <img src={heroItem.image} alt={heroItem.name} className="h-24 w-24 shrink-0 rounded-xl object-cover" />
           </div>
-        </div>
+        )}
 
-        {/* 3 Sambal Khas Strip Ringkas */}
-        <div 
-          onClick={() => setSelectedCategory('Aneka Sambal')}
-          className="bg-emerald-950 dark:bg-emerald-950/80 text-white rounded-xl px-3 py-2 shadow-sm border border-emerald-800/60 flex items-center justify-between cursor-pointer hover:bg-emerald-900/90 transition active:scale-[0.99]"
-        >
-          <div className="flex items-center gap-2">
-            <span className="text-sm">🌶️</span>
-            <span className="text-xs font-bold text-amber-400">3 Sambal Khas:</span>
-            <div className="flex items-center gap-1.5 text-[11px] text-emerald-200">
-              <span className="bg-emerald-900/80 px-2 py-0.5 rounded-md border border-emerald-700/50">🔥 Terasi</span>
-              <span className="bg-emerald-900/80 px-2 py-0.5 rounded-md border border-emerald-700/50">🧅 Bawang</span>
-              <span className="bg-emerald-900/80 px-2 py-0.5 rounded-md border border-emerald-700/50">🍃 Cabe Ijo</span>
-            </div>
-          </div>
-          <span className="text-[10px] text-emerald-300 font-medium hover:underline flex items-center gap-0.5">
-            Pilih <ArrowRight className="w-2.5 h-2.5" />
-          </span>
+        <div className="flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => setSelectedCategory('Aneka Sambal')}
+            className="inline-flex min-w-0 items-center gap-1 text-[11px] text-slate-600 dark:text-slate-400"
+          >
+            <span>🌶️ Sambal: Terasi · Bawang · Ijo</span>
+            <ArrowRight className="h-3 w-3 shrink-0" />
+          </button>
+          <ThemeToggle compact />
         </div>
 
         {/* Category Pills Slider */}
@@ -900,6 +826,15 @@ function OrderingAppContent() {
             </button>
           ))}
         </div>
+        <label className="inline-flex cursor-pointer items-center gap-2 py-1 text-[11px] text-slate-600 dark:text-slate-400">
+          <input
+            type="checkbox"
+            checked={showSoldOut}
+            onChange={(event) => setShowSoldOut(event.target.checked)}
+            className="h-3.5 w-3.5 accent-red-600"
+          />
+          Tampilkan yang habis
+        </label>
       </div>
 
       {/* Menu Grid List */}
@@ -922,12 +857,12 @@ function OrderingAppContent() {
           <div className="text-center py-12 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-2">
             <span className="text-3xl">🍲</span>
             <p className="text-xs font-bold text-slate-700 dark:text-slate-200">Menu tidak ditemukan</p>
-            <p className="text-[11px] text-slate-400">Coba ganti kata kunci pencarian atau kategori lain.</p>
+            <p className="text-[11px] text-slate-400">Coba kategori lain, ubah pencarian, atau aktifkan “Tampilkan yang habis”.</p>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3">
             {filteredItems.map((item) => {
-              const isAvailable = item.isAvailable !== false;
+              const isAvailable = item.isAvailable !== false && (item.stock == null || item.stock > 0);
               return (
                 <div
                   key={item.id}
