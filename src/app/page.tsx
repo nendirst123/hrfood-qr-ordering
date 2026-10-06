@@ -673,7 +673,7 @@ function OrderingAppContent() {
             <img 
               src="/hrfood-full-logo.png" 
               alt="HR Food - Makan Enak, Mood Naik!" 
-              className="h-9 object-contain"
+              className="h-14 object-contain"
             />
           </div>
 
