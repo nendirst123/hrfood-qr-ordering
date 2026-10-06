@@ -675,6 +675,7 @@ function OrderingAppContent() {
               alt="HR Food - Makan Enak, Mood Naik!" 
               className="h-9 object-contain"
             />
+            <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 leading-tight">Makan Enak,<br/>Mood Naik!</p>
           </div>
 
           {/* Cart & Table Button */}
