@@ -181,7 +181,7 @@ export default function PosPage() {
           </a>
         </div>
 
-        <div className="flex flex-col lg:flex-row gap-4 p-3 sm:p-4 max-w-7xl mx-auto">
+        <div className="flex flex-col lg:flex-row gap-4 p-3 sm:p-4 max-w-[1600px] mx-auto">
           {/* Kiri: menu */}
           <div className="flex-1 min-w-0">
             <div className="flex gap-2 mb-3">
@@ -214,7 +214,7 @@ export default function PosPage() {
             {loading ? (
               <p className="text-sm text-slate-500 text-center py-10">Memuat menu...</p>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-2.5">
                 {filtered.map((m) => {
                   const soldOut = m.isAvailable === false;
                   const lowStock = typeof m.stock === 'number' && m.stock > 0 && m.stock <= 5;
@@ -229,7 +229,7 @@ export default function PosPage() {
                           : 'border-slate-200 dark:border-slate-700 hover:border-red-400 active:scale-[0.98]'
                       }`}
                     >
-                      <div className="w-full aspect-[4/3] rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 mb-2">
+                      <div className="w-full aspect-video rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 mb-2">
                         <img src={m.image} alt={m.name} className={`w-full h-full object-cover ${soldOut && 'grayscale'}`} loading="lazy" />
                       </div>
                       <p className="text-xs font-bold truncate">{m.name}</p>
