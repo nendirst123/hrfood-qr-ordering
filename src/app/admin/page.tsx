@@ -11,6 +11,7 @@ import ThermalReceiptModal from '@/components/ThermalReceiptModal';
 import { ThemeToggle } from '@/components/ThemeProvider';
 import { Bell, Volume2, VolumeX, Store, Clock, Power, MapPin, Navigation, Compass, ExternalLink, Phone, MessageCircle } from 'lucide-react';
 import AdminPinGate from '@/components/AdminPinGate';
+import { compressImage, formatBytes } from '@/lib/image-compressor';
 
 interface ReportData {
   date: string;
@@ -126,6 +127,21 @@ function AdminDashboardInner() {
   const [formImage, setFormImage] = useState('');
   const [formIsPopular, setFormIsPopular] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgressText, setUploadProgressText] = useState('');
+  const [uploadStats, setUploadStats] = useState<{
+    originalBytes: number;
+    compressedBytes: number;
+    savingsPercent: number;
+    fileName: string;
+    previewUrl?: string;
+  } | null>(null);
+  const [editUploadStats, setEditUploadStats] = useState<{
+    originalBytes: number;
+    compressedBytes: number;
+    savingsPercent: number;
+    fileName: string;
+    previewUrl?: string;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -576,12 +592,39 @@ function AdminDashboardInner() {
     }
   };
 
-  // Upload Gambar Menu
+  // Upload & Kompresi Otomatis Gambar Menu
   const handleFileUpload = async (file: File, isEditing = false) => {
     setIsUploading(true);
+    setUploadProgressText('Mengompresi foto...');
     try {
+      // 1. Kompresi gambar otomatis di browser (Canvas WebP max 1000px, quality 0.82)
+      let fileToUpload = file;
+      let stats = null;
+
+      try {
+        const compressed = await compressImage(file, {
+          maxWidth: 1000,
+          maxHeight: 1000,
+          quality: 0.82,
+          preferredMimeType: 'image/webp',
+        });
+        fileToUpload = compressed.file;
+        stats = {
+          originalBytes: compressed.originalBytes,
+          compressedBytes: compressed.compressedBytes,
+          savingsPercent: compressed.savingsPercent,
+          fileName: compressed.file.name,
+          previewUrl: compressed.dataUrl,
+        };
+      } catch (compErr) {
+        console.warn('Kompresi canvas dilewati/gagal, lanjut dengan file asli:', compErr);
+      }
+
+      setUploadProgressText('Mengunggah ke server...');
+
+      // 2. Kirim file yang sudah terkompresi (~40KB-90KB) ke server
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', fileToUpload);
       const res = await fetch('/api/upload', {
         method: 'POST',
         body: formData,
@@ -590,8 +633,10 @@ function AdminDashboardInner() {
       if (data.success && data.url) {
         if (isEditing && editingItem) {
           setEditingItem({ ...editingItem, image: data.url });
+          if (stats) setEditUploadStats(stats);
         } else {
           setFormImage(data.url);
+          if (stats) setUploadStats(stats);
         }
       } else {
         alert('Gagal mengunggah foto: ' + (data.error || 'Unknown error'));
@@ -601,6 +646,7 @@ function AdminDashboardInner() {
       alert('Terjadi kesalahan saat mengunggah foto');
     } finally {
       setIsUploading(false);
+      setUploadProgressText('');
     }
   };
 
@@ -1510,7 +1556,10 @@ function AdminDashboardInner() {
 
             {activeTab === 'catalog' && (
               <button
-                onClick={() => setIsAddModalOpen(true)}
+                onClick={() => {
+                  setUploadStats(null);
+                  setIsAddModalOpen(true);
+                }}
                 className="bg-emerald-600 hover:bg-emerald-500 text-white font-black px-3.5 py-2 rounded-xl text-xs shadow transition flex items-center justify-center gap-1.5 flex-shrink-0 active:scale-95"
               >
                 <span>➕</span> Tambah Menu Baru
@@ -2004,6 +2053,7 @@ function AdminDashboardInner() {
 
                       <button
                         onClick={() => {
+                          setEditUploadStats(null);
                           setEditingItem({ ...item });
                           setIsEditModalOpen(true);
                         }}
@@ -2847,7 +2897,9 @@ function AdminDashboardInner() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Foto Menu</label>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Foto Menu <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">(Otomatis dikompresi)</span>
+                </label>
                 <div className="flex gap-2 items-center">
                   <input
                     type="text"
@@ -2867,17 +2919,45 @@ function AdminDashboardInner() {
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isUploading}
-                    className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-750 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-650 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200"
+                    className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-750 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-650 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition disabled:opacity-60"
                   >
-                    {isUploading ? 'Uploading...' : '📁 Upload'}
+                    {isUploading ? (
+                      <>
+                        <span className="w-3 h-3 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></span>
+                        <span>{uploadProgressText || 'Memproses...'}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>⚡ Upload & Kompres</span>
+                      </>
+                    )}
                   </button>
                 </div>
+                <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">
+                  Foto resolusi tinggi dari HP (3-10 MB) otomatis diperkecil ke format WebP ringan (~50 KB) tanpa mengurangi kejernihan.
+                </p>
                 {formImage && (
-                  <div className="mt-2 flex items-center gap-2">
-                    <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
-                      <img src={formImage} alt="Preview" className="w-full h-full object-cover" />
+                  <div className="mt-2 flex items-center gap-2.5 p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">
+                    <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 shrink-0">
+                      <img src={uploadStats?.previewUrl || formImage} alt="Preview" className="w-full h-full object-cover" />
                     </div>
-                    <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">✓ Foto terpasang</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold">✓ Foto Siap Digunakan</span>
+                        {uploadStats && (
+                          <span className="bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                            Hemat {uploadStats.savingsPercent}%
+                          </span>
+                        )}
+                      </div>
+                      {uploadStats ? (
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                          {formatBytes(uploadStats.originalBytes)} → <span className="font-bold text-slate-700 dark:text-slate-200">{formatBytes(uploadStats.compressedBytes)}</span> (WebP Optimal)
+                        </p>
+                      ) : (
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">Tersambung ke menu</p>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -2973,7 +3053,9 @@ function AdminDashboardInner() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Ubah Foto Menu</label>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Ubah Foto Menu <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">(Otomatis dikompresi)</span>
+                </label>
                 <div className="flex gap-2 items-center">
                   <input
                     type="text"
@@ -2992,17 +3074,45 @@ function AdminDashboardInner() {
                     type="button"
                     onClick={() => editFileInputRef.current?.click()}
                     disabled={isUploading}
-                    className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-750 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-650 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200"
+                    className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-750 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-650 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition disabled:opacity-60"
                   >
-                    {isUploading ? 'Uploading...' : '📁 Upload'}
+                    {isUploading ? (
+                      <>
+                        <span className="w-3 h-3 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></span>
+                        <span>{uploadProgressText || 'Memproses...'}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>⚡ Upload & Kompres</span>
+                      </>
+                    )}
                   </button>
                 </div>
+                <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">
+                  Foto resolusi tinggi dari HP (3-10 MB) otomatis diperkecil ke format WebP ringan (~50 KB) tanpa mengurangi kejernihan.
+                </p>
                 {editingItem.image && (
-                  <div className="mt-2 flex items-center gap-2">
-                    <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
-                      <img src={editingItem.image} alt="Preview" className="w-full h-full object-cover" />
+                  <div className="mt-2 flex items-center gap-2.5 p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">
+                    <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 shrink-0">
+                      <img src={editUploadStats?.previewUrl || editingItem.image} alt="Preview" className="w-full h-full object-cover" />
                     </div>
-                    <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">✓ Foto terpasang</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold">✓ Foto Siap Digunakan</span>
+                        {editUploadStats && (
+                          <span className="bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                            Hemat {editUploadStats.savingsPercent}%
+                          </span>
+                        )}
+                      </div>
+                      {editUploadStats ? (
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                          {formatBytes(editUploadStats.originalBytes)} → <span className="font-bold text-slate-700 dark:text-slate-200">{formatBytes(editUploadStats.compressedBytes)}</span> (WebP Optimal)
+                        </p>
+                      ) : (
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">Tersambung ke menu</p>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>

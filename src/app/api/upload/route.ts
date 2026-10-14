@@ -5,7 +5,7 @@ import { requireAdmin } from '@/lib/admin-auth';
 
 export const dynamic = 'force-dynamic';
 
-const MAX_UPLOAD_BYTES = 5 * 1024 * 1024; // 5 MB
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
 const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 
 export async function POST(req: NextRequest) {
@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
 
     // KEAMANAN: batasi ukuran & tipe file
     if (file.size > MAX_UPLOAD_BYTES) {
-      return NextResponse.json({ success: false, error: 'Ukuran file maksimal 5 MB.' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Ukuran file maksimal 10 MB.' }, { status: 400 });
     }
     const mimeType = file.type || 'image/jpeg';
     if (!ALLOWED_MIME.has(mimeType)) {
@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
     if (isVercel) {
       const base64 = buffer.toString('base64');
       const dataUrl = `data:${mimeType};base64,${base64}`;
-      return NextResponse.json({ success: true, url: dataUrl });
+      return NextResponse.json({ success: true, url: dataUrl, size: buffer.length });
     }
 
     try {
