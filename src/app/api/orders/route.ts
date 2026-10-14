@@ -62,6 +62,8 @@ export async function POST(request: NextRequest) {
       discountCode,
       clientAvailability,
       source,
+      cashReceived,
+      changeAmount,
     } = body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -168,6 +170,8 @@ export async function POST(request: NextRequest) {
       discountCode,
       // Sumber order: hanya admin/kasir yang boleh menandai 'pos'.
       source: isAdminRequest(request) && source === 'pos' ? 'pos' : 'qr',
+      cashReceived: typeof cashReceived === 'number' ? cashReceived : undefined,
+      changeAmount: typeof changeAmount === 'number' ? changeAmount : undefined,
     });
 
     // NOTIF WA: kabari pelanggan bahwa pesanan diterima (async, tidak menghambat respons)

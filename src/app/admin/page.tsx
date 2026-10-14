@@ -29,7 +29,8 @@ interface ReportData {
 }
 
 function AdminDashboardInner() {
-  const [activeTab, setActiveTab] = useState<'analytics' | 'catalog' | 'delivery' | 'stock' | 'promo' | 'notif'>('analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'catalog' | 'settings'>('analytics');
+  const [settingsSubTab, setSettingsSubTab] = useState<'store' | 'delivery' | 'promo' | 'notif'>('store');
 
   // Promo Codes State
   const [promos, setPromos] = useState<PromoCode[]>([]);
@@ -828,9 +829,9 @@ function AdminDashboardInner() {
   };
 
   useEffect(() => {
-    if (activeTab === 'notif' && !waLoaded) fetchWaSettings();
+    if (activeTab === 'settings' && settingsSubTab === 'notif' && !waLoaded) fetchWaSettings();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
+  }, [activeTab, settingsSubTab]);
 
   const handleSaveWaSettings = async () => {
     setWaSaving(true);
@@ -1249,8 +1250,12 @@ function AdminDashboardInner() {
 
   const filteredMenu = menuItems.filter(item => {
     const matchCat = selectedCategory === 'Semua' || item.category === selectedCategory;
-    const matchSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchCat && matchSearch;
+    const q = searchQuery.toLowerCase().trim();
+    const matchSearch = !q || item.name.toLowerCase().includes(q) || (item.category || '').toLowerCase().includes(q);
+    const matchStock =
+      stockFilter === 'available' ? item.isAvailable !== false :
+      stockFilter === 'sold_out' ? item.isAvailable === false : true;
+    return matchCat && matchSearch && matchStock;
   });
 
   const totalSoldOut = menuItems.filter(m => m.isAvailable === false).length;
@@ -1450,130 +1455,86 @@ function AdminDashboardInner() {
           </div>
         </div>
 
-        {/* 4 Tab Navigasi */}
+        {/* Modern 3-Tab Navigasi Minimalis */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3 mb-4 sm:mb-6">
           <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar pb-1 sm:pb-0">
             <button
               onClick={() => setActiveTab('analytics')}
-              className={`flex items-center gap-1.5 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl font-bold text-xs transition shadow-sm flex-shrink-0 ${
+              className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs transition shadow-sm flex-shrink-0 ${
                 activeTab === 'analytics'
-                  ? 'bg-red-600 text-white shadow-red-900/30'
-                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-750 border border-slate-200 dark:border-transparent'
+                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow'
+                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-transparent'
               }`}
             >
               <span>📊</span>
-              <span>Rekap Omzet & Kasir</span>
+              <span>Penjualan & Pesanan</span>
             </button>
 
             <button
               onClick={() => setActiveTab('catalog')}
-              className={`flex items-center gap-1.5 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl font-bold text-xs transition shadow-sm flex-shrink-0 ${
+              className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs transition shadow-sm flex-shrink-0 ${
                 activeTab === 'catalog'
-                  ? 'bg-red-600 text-white shadow-red-900/30'
-                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-750 border border-slate-200 dark:border-transparent'
+                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow'
+                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-transparent'
               }`}
             >
-              <span>📝</span>
-              <span>Kelola Menu (Owner)</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('delivery')}
-              className={`flex items-center gap-1.5 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl font-bold text-xs transition shadow-sm flex-shrink-0 ${
-                activeTab === 'delivery'
-                  ? 'bg-purple-600 text-white shadow-purple-900/30'
-                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-750 border border-slate-200 dark:border-transparent'
-              }`}
-            >
-              <span>🛵</span>
-              <span>Kelola Ongkir & Delivery</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('stock')}
-              className={`flex items-center gap-1.5 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl font-bold text-xs transition shadow-sm flex-shrink-0 relative ${
-                activeTab === 'stock'
-                  ? 'bg-red-600 text-white shadow-red-900/30'
-                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-750 border border-slate-200 dark:border-transparent'
-              }`}
-            >
-              <span>🔴</span>
-              <span>Saklar Stok</span>
+              <span>🍛</span>
+              <span>Menu & Saklar Stok</span>
               {totalSoldOut > 0 && (
-                <span className="bg-amber-400 text-slate-950 text-[10px] font-black px-1.5 py-0.2 rounded-full ml-1">
-                  {totalSoldOut}
+                <span className="bg-red-500 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full">
+                  {totalSoldOut} Habis
                 </span>
               )}
             </button>
 
             <button
-              onClick={() => setActiveTab('promo')}
-              className={`flex items-center gap-1.5 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl font-bold text-xs transition shadow-sm flex-shrink-0 relative ${
-                activeTab === 'promo'
-                  ? 'bg-amber-600 text-white shadow-amber-900/30'
-                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-750 border border-slate-200 dark:border-transparent'
+              onClick={() => setActiveTab('settings')}
+              className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs transition shadow-sm flex-shrink-0 ${
+                activeTab === 'settings'
+                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow'
+                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-transparent'
               }`}
             >
-              <span>🎟️</span>
-              <span>Promo & Kupon</span>
-              {promos.filter(p => p.isActive).length > 0 && (
-                <span className="bg-amber-400 text-slate-950 text-[10px] font-black px-1.5 py-0.2 rounded-full ml-1">
-                  {promos.filter(p => p.isActive).length}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={() => setActiveTab('notif')}
-              className={`flex items-center gap-1.5 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl font-bold text-xs transition shadow-sm flex-shrink-0 relative ${
-                activeTab === 'notif'
-                  ? 'bg-emerald-600 text-white shadow-emerald-900/30'
-                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-750 border border-slate-200 dark:border-transparent'
-              }`}
-            >
-              <span>💬</span>
-              <span>Notifikasi WA</span>
-              {waLoaded && waEnabled && waTokenSet && (
-                <span className="bg-emerald-400 text-slate-950 text-[10px] font-black px-1.5 py-0.2 rounded-full ml-1">
-                  ON
-                </span>
-              )}
+              <span>⚙️</span>
+              <span>Pengaturan Resto</span>
             </button>
           </div>
 
-          <a
-            href="/pos"
-            className="bg-slate-900 dark:bg-white dark:text-slate-900 text-white font-black px-4 py-2 rounded-xl text-xs shadow-lg transition flex items-center justify-center gap-1.5 flex-shrink-0 hover:opacity-90"
-          >
-            <span>🧾</span> Mode Kasir
-          </a>
-
-          {activeTab === 'catalog' && (
-            <button
-              onClick={() => setIsAddModalOpen(true)}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white font-black px-4 py-2 rounded-xl text-xs shadow-lg transition flex items-center justify-center gap-1.5 flex-shrink-0"
+          <div className="flex items-center gap-2 flex-wrap">
+            <a
+              href="/pos"
+              className="bg-red-700 hover:bg-red-600 text-white font-black px-3.5 py-2 rounded-xl text-xs shadow transition flex items-center justify-center gap-1.5 flex-shrink-0 active:scale-95"
             >
-              <span>➕</span> Tambah Menu Baru
-            </button>
-          )}
+              <span>🧾</span> Mode Kasir
+            </a>
 
-          {activeTab === 'delivery' && (
-            <button
-              onClick={() => handleOpenZoneModal()}
-              className="bg-purple-600 hover:bg-purple-500 text-white font-black px-4 py-2 rounded-xl text-xs shadow-lg transition flex items-center justify-center gap-1.5 flex-shrink-0"
-            >
-              <span>➕</span> Tambah Zona Ongkir
-            </button>
-          )}
+            {activeTab === 'catalog' && (
+              <button
+                onClick={() => setIsAddModalOpen(true)}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white font-black px-3.5 py-2 rounded-xl text-xs shadow transition flex items-center justify-center gap-1.5 flex-shrink-0 active:scale-95"
+              >
+                <span>➕</span> Tambah Menu Baru
+              </button>
+            )}
 
-          {activeTab === 'promo' && (
-            <button
-              onClick={() => handleOpenPromoModal()}
-              className="bg-amber-600 hover:bg-amber-500 text-white font-black px-4 py-2 rounded-xl text-xs shadow-lg transition flex items-center justify-center gap-1.5 flex-shrink-0"
-            >
-              <span>➕</span> Tambah Kupon Promo
-            </button>
-          )}
+            {activeTab === 'settings' && settingsSubTab === 'delivery' && (
+              <button
+                onClick={() => handleOpenZoneModal()}
+                className="bg-purple-600 hover:bg-purple-500 text-white font-black px-3.5 py-2 rounded-xl text-xs shadow transition flex items-center justify-center gap-1.5 flex-shrink-0 active:scale-95"
+              >
+                <span>➕</span> Tambah Zona Ongkir
+              </button>
+            )}
+
+            {activeTab === 'settings' && settingsSubTab === 'promo' && (
+              <button
+                onClick={() => handleOpenPromoModal()}
+                className="bg-amber-600 hover:bg-amber-500 text-white font-black px-3.5 py-2 rounded-xl text-xs shadow transition flex items-center justify-center gap-1.5 flex-shrink-0 active:scale-95"
+              >
+                <span>➕</span> Tambah Kupon Promo
+              </button>
+            )}
+          </div>
         </div>
 
         {/* TAB 1: REKAP OMZET & KASIR */}
@@ -1876,11 +1837,69 @@ function AdminDashboardInner() {
           </div>
         )}
 
-        {/* TAB 2: KELOLA KATALOG MENU (OWNER CRUD) */}
+        {/* TAB 2: KELOLA KATALOG MENU & SAKLAR STOK (TERPADU) */}
         {activeTab === 'catalog' && (
           <div className="space-y-6">
-            <div className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm dark:shadow-xl flex flex-wrap items-center justify-between gap-4 transition-colors">
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
+            {/* Filter Kategori & Status Stok */}
+            <div className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm dark:shadow-xl space-y-3 transition-colors">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                {/* Search */}
+                <div className="relative flex-1 max-w-md">
+                  <input
+                    type="text"
+                    placeholder="Cari nama menu atau kategori..."
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl pl-9 pr-8 py-2 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  />
+                  <span className="absolute left-3 top-2.5 text-slate-400 text-xs">🔍</span>
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-3 top-2 text-slate-400 hover:text-slate-600 text-xs"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                {/* Filter Ketersediaan Stok */}
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                  <button
+                    onClick={() => setStockFilter('all')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap ${
+                      stockFilter === 'all'
+                        ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    Semua ({menuItems.length})
+                  </button>
+                  <button
+                    onClick={() => setStockFilter('available')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap ${
+                      stockFilter === 'available'
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
+                    }`}
+                  >
+                    Tersedia ({menuItems.filter(m => m.isAvailable !== false).length})
+                  </button>
+                  <button
+                    onClick={() => setStockFilter('sold_out')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap ${
+                      stockFilter === 'sold_out'
+                        ? 'bg-red-600 text-white'
+                        : 'bg-slate-100 dark:bg-slate-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40'
+                    }`}
+                  >
+                    Habis ({totalSoldOut})
+                  </button>
+                </div>
+              </div>
+
+              {/* Kategori Pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-1 border-t border-slate-100 dark:border-slate-800">
                 {CATEGORIES.map(cat => (
                   <button
                     key={cat}
@@ -1895,35 +1914,34 @@ function AdminDashboardInner() {
                   </button>
                 ))}
               </div>
-
-              <div className="relative min-w-[200px] flex-1 max-w-xs">
-                <input
-                  type="text"
-                  placeholder="Cari menu di katalog..."
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-red-500"
-                />
-              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredMenu.map(item => (
                 <div
                   key={item.id}
-                  className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm dark:shadow-xl flex flex-col justify-between transition-colors"
+                  className={`bg-white dark:bg-slate-850 border rounded-2xl p-4 shadow-sm dark:shadow-xl flex flex-col justify-between transition-colors ${
+                    item.isAvailable === false ? 'border-red-200 dark:border-red-900/60 bg-red-50/20 dark:bg-red-950/10' : 'border-slate-200 dark:border-slate-800'
+                  }`}
                 >
                   <div className="flex gap-3">
                     <div className="relative w-20 h-20 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 flex-shrink-0 border border-slate-200 dark:border-slate-750">
                       <img
                         src={item.image}
                         alt={item.name}
-                        className="w-full h-full object-cover"
+                        className={`w-full h-full object-cover ${item.isAvailable === false ? 'grayscale' : ''}`}
                       />
                       {item.isPopular && (
                         <span className="absolute top-1 left-1 bg-amber-500 text-slate-950 text-[9px] font-black px-1 rounded shadow">
                           FAVORIT
                         </span>
+                      )}
+                      {item.isAvailable === false && (
+                        <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                          <span className="text-[10px] font-black text-white bg-red-600 px-1.5 py-0.5 rounded">
+                            HABIS
+                          </span>
+                        </div>
                       )}
                     </div>
 
@@ -1941,15 +1959,49 @@ function AdminDashboardInner() {
                     </div>
                   </div>
 
-                  <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5">
+                  <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2 flex-wrap">
+                    {/* Saklar 1-Klik Instan */}
+                    <button
+                      disabled={updatingId === item.id}
+                      onClick={() => handleToggleStock(item)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm active:scale-95 ${
+                        item.isAvailable !== false
+                          ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100'
+                          : 'bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 hover:bg-red-100'
+                      }`}
+                      title="Klik 1x untuk ubah Tersedia / Habis seketika"
+                    >
                       <span className={`w-2 h-2 rounded-full ${item.isAvailable !== false ? 'bg-emerald-500' : 'bg-red-500'}`} />
-                      <span className="text-[11px] text-slate-700 dark:text-slate-300 font-medium">
-                        {item.isAvailable !== false ? 'Tersedia' : 'Habis'}
-                      </span>
-                    </div>
+                      <span>{updatingId === item.id ? 'Menyimpan...' : item.isAvailable !== false ? 'Tersedia' : 'Habis'}</span>
+                    </button>
 
                     <div className="flex items-center gap-1.5">
+                      {/* Atur sisa stok porsi */}
+                      <button
+                        onClick={() => {
+                          const cur = typeof item.stock === 'number' ? item.stock : '';
+                          const ans = window.prompt(`Atur sisa porsi menu "${item.name}":\n(Kosongkan jika stok tanpa batas / selalu siap)`, cur.toString());
+                          if (ans === null) return;
+                          const trimmed = ans.trim();
+                          if (trimmed === '') {
+                            handleSetStock(item, null);
+                          } else {
+                            const n = parseInt(trimmed, 10);
+                            if (!isNaN(n) && n >= 0) handleSetStock(item, n);
+                          }
+                        }}
+                        className={`px-2 py-1 rounded-lg text-[10.5px] font-bold border transition ${
+                          typeof item.stock === 'number'
+                            ? item.stock <= 5
+                              ? 'bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/60 dark:text-amber-400'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                            : 'bg-slate-50 dark:bg-slate-800 text-slate-400 border-dashed border-slate-300 dark:border-slate-700'
+                        }`}
+                        title="Atur sisa porsi menu"
+                      >
+                        {typeof item.stock === 'number' ? `Stok: ${item.stock}` : 'Stok: ∞'}
+                      </button>
+
                       <button
                         onClick={() => {
                           setEditingItem({ ...item });
@@ -1975,11 +2027,81 @@ function AdminDashboardInner() {
           </div>
         )}
 
-        {/* TAB 3: KELOLA ONGKIR & DELIVERY */}
-        {activeTab === 'delivery' && (
+        {/* TAB 3: PENGATURAN RESTO (TOKO, ONGKIR, PROMO, NOTIF WA) */}
+        {activeTab === 'settings' && (
           <div className="space-y-6">
-            {/* KARTU KHUSUS: LOKASI FISIK RESTO & TITIK GPS TOKO */}
-            <div className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6 shadow-sm dark:shadow-xl space-y-4 transition-colors">
+            {/* Sub-tab Navigation */}
+            <div className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-2xl p-1.5 shadow-sm flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+              <button
+                type="button"
+                onClick={() => setSettingsSubTab('store')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap ${
+                  settingsSubTab === 'store'
+                    ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+                }`}
+              >
+                <span>🏪</span>
+                <span>Operasional & Alamat Toko</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSettingsSubTab('delivery')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap ${
+                  settingsSubTab === 'delivery'
+                    ? 'bg-purple-600 text-white shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+                }`}
+              >
+                <span>🛵</span>
+                <span>Pengiriman & Ongkir</span>
+                {deliverySettings?.zones && (
+                  <span className="bg-white/20 text-[10px] px-1.5 py-0.2 rounded-full">
+                    {deliverySettings.zones.length}
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSettingsSubTab('promo')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap ${
+                  settingsSubTab === 'promo'
+                    ? 'bg-amber-600 text-white shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+                }`}
+              >
+                <span>🎟️</span>
+                <span>Kupon Diskon & Promo</span>
+                {promos.filter(p => p.isActive).length > 0 && (
+                  <span className="bg-white/20 text-[10px] px-1.5 py-0.2 rounded-full">
+                    {promos.filter(p => p.isActive).length}
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSettingsSubTab('notif')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap ${
+                  settingsSubTab === 'notif'
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+                }`}
+              >
+                <span>💬</span>
+                <span>Notifikasi WhatsApp (Fonnte)</span>
+                {waLoaded && waEnabled && waTokenSet && (
+                  <span className="bg-emerald-300 text-slate-950 text-[9px] font-black px-1.5 py-0.2 rounded-full">
+                    ON
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {settingsSubTab === 'store' && (
+              <div className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6 shadow-sm dark:shadow-xl space-y-4 transition-colors">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-750 pb-3">
                 <div className="flex items-center gap-2.5">
                   <div className="w-9 h-9 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center">
@@ -2043,9 +2165,11 @@ function AdminDashboardInner() {
                 </div>
               </div>
             </div>
+            )}
 
-            {/* Header Delivery Toggle Card */}
-            <div className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6 shadow-sm dark:shadow-xl space-y-4 transition-colors">
+            {settingsSubTab === 'delivery' && (
+              <div className="space-y-6">
+                <div className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6 shadow-sm dark:shadow-xl space-y-4 transition-colors">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-750 pb-4">
                 <div>
                   <h2 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
@@ -2233,8 +2357,8 @@ function AdminDashboardInner() {
           </div>
         )}
 
-        {/* TAB 4: SAKLAR STOK CEPAT */}
-        {activeTab === 'stock' && (
+        {/* TAB 4: SAKLAR STOK CEPAT (Sudah terintegrasi ke Tab Menu & Saklar Stok) */}
+        {false && (
           <div className="space-y-6">
             <div className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm dark:shadow-xl flex items-center justify-between transition-colors">
               <div>
@@ -2419,8 +2543,8 @@ function AdminDashboardInner() {
           </div>
         )}
 
-        {/* TAB: NOTIFIKASI WHATSAPP OTOMATIS */}
-        {activeTab === 'notif' && (
+        {/* SUBTAB: NOTIFIKASI WHATSAPP OTOMATIS */}
+        {settingsSubTab === 'notif' && (
           <div className="space-y-6">
             <div className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6 shadow-sm dark:shadow-xl space-y-5 transition-colors">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
@@ -2534,8 +2658,8 @@ function AdminDashboardInner() {
           </div>
         )}
 
-        {/* TAB 5: MANAJEMEN KUPON & PROMO */}
-        {activeTab === 'promo' && (
+        {/* SUBTAB: MANAJEMEN KUPON & PROMO */}
+        {settingsSubTab === 'promo' && (
           <div className="space-y-6">
             {/* Header Promo Banner Card */}
             <div className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6 shadow-sm dark:shadow-xl space-y-4 transition-colors">
@@ -2656,6 +2780,8 @@ function AdminDashboardInner() {
                 );
               })}
             </div>
+          </div>
+        )}
           </div>
         )}
       </main>

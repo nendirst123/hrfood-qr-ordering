@@ -201,6 +201,18 @@ export default function ThermalReceiptModal({ order, onClose }: ThermalReceiptMo
                     <span>TOTAL:</span>
                     <span>Rp {order.total.toLocaleString('id-ID')}</span>
                   </div>
+                  {typeof order.cashReceived === 'number' && order.cashReceived > 0 && (
+                    <>
+                      <div className="flex justify-between pt-1">
+                        <span>Tunai (Diterima):</span>
+                        <span>Rp {order.cashReceived.toLocaleString('id-ID')}</span>
+                      </div>
+                      <div className="flex justify-between font-bold">
+                        <span>Kembalian:</span>
+                        <span>Rp {(order.changeAmount ?? Math.max(0, order.cashReceived - order.total)).toLocaleString('id-ID')}</span>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* Footer Pesan */}

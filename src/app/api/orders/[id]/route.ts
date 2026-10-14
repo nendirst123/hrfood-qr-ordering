@@ -35,9 +35,12 @@ export async function PATCH(
 
   try {
     const body = await request.json();
-    const { status, isPaid } = body;
+    const { status, isPaid, cashReceived, changeAmount } = body;
 
-    const updated = await updateOrderStatus(params.id, status, isPaid);
+    const updated = await updateOrderStatus(params.id, status, isPaid, {
+      cashReceived: typeof cashReceived === 'number' ? cashReceived : undefined,
+      changeAmount: typeof changeAmount === 'number' ? changeAmount : undefined,
+    });
     if (!updated) {
       return NextResponse.json({ success: false, error: 'Pesanan tidak ditemukan' }, { status: 404 });
     }

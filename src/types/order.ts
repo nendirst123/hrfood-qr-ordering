@@ -87,6 +87,10 @@ export interface Order {
   paymentMethod: PaymentMethod;
   isPaid: boolean;
   status: OrderStatus;
+  /** Uang tunai yang diterima kasir (untuk kalkulasi kembalian & cetak struk) */
+  cashReceived?: number;
+  /** Nominal uang kembalian */
+  changeAmount?: number;
   /** Sumber order: 'qr' (pelanggan via QR) atau 'pos' (kasir). Default 'qr'. */
   source?: 'qr' | 'pos';
   createdAt: string; // ISO String

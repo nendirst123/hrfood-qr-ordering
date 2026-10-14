@@ -80,6 +80,8 @@ export async function createOrder(payload: {
   discountCode?: string;
   discountAmount?: number;
   source?: 'qr' | 'pos';
+  cashReceived?: number;
+  changeAmount?: number;
 }): Promise<Order> {
   const orders = await loadOrders();
 
@@ -239,6 +241,8 @@ export async function createOrder(payload: {
     // Status lunas hanya bisa diubah dari dapur/admin (endpoint terproteksi).
     isPaid: false,
     status: 'pending_payment',
+    cashReceived: typeof payload.cashReceived === 'number' ? payload.cashReceived : undefined,
+    changeAmount: typeof payload.changeAmount === 'number' ? payload.changeAmount : undefined,
     source: payload.source === 'pos' ? 'pos' : 'qr',
     createdAt: now,
     updatedAt: now,
@@ -249,7 +253,12 @@ export async function createOrder(payload: {
   return newOrder;
 }
 
-export async function updateOrderStatus(id: string, status: OrderStatus, isPaid?: boolean): Promise<Order | null> {
+export async function updateOrderStatus(
+  id: string,
+  status: OrderStatus,
+  isPaid?: boolean,
+  extra?: { cashReceived?: number; changeAmount?: number }
+): Promise<Order | null> {
   const orders = await loadOrders();
   const index = orders.findIndex(o => o.id === id);
   if (index === -1) return null;
@@ -258,6 +267,12 @@ export async function updateOrderStatus(id: string, status: OrderStatus, isPaid?
   orders[index].status = status;
   if (typeof isPaid === 'boolean') {
     orders[index].isPaid = isPaid;
+  }
+  if (extra?.cashReceived !== undefined) {
+    orders[index].cashReceived = extra.cashReceived;
+  }
+  if (extra?.changeAmount !== undefined) {
+    orders[index].changeAmount = extra.changeAmount;
   }
   orders[index].updatedAt = new Date().toISOString();
 
