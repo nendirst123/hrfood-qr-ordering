@@ -263,6 +263,16 @@ export async function restoreMenuItem(id: string): Promise<MenuItem | null> {
   const deleted = (await getDeletedMenuIds()).filter((dId) => dId !== id);
   await saveDeletedMenuIds(deleted);
 
+  // Jika item berasal dari katalog bawaan dan belum ada di baseItems, pulihkan kembali ke baseItems
+  const baseItems = await kvGet<MenuItem[]>(MENU_KEY, []);
+  if (!baseItems.some((m) => m.id === id)) {
+    const bundled = MENU_ITEMS.find((m) => m.id === id);
+    if (bundled) {
+      baseItems.push(bundled);
+      await saveMenuItems(baseItems);
+    }
+  }
+
   const refreshed = await getMenuWithAvailability();
   await saveMenuItems(refreshed);
 
