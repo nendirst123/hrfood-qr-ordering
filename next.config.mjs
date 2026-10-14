@@ -1,6 +1,12 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  experimental: {
+    serverComponentsExternalPackages: ['pdfkit'],
+    outputFileTracingIncludes: {
+      '/api/reports/pdf': ['./node_modules/pdfkit/**/*'],
+    },
+  },
   images: {
     remotePatterns: [
       {

@@ -1,3 +1,4 @@
+export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
@@ -8,7 +9,7 @@ import { getReportData, formatRp, ReportData } from '@/lib/report';
 // pdfkit hanya di-load saat route dipanggil (hindari beban cold-start)
 async function buildPdf(report: ReportData): Promise<Buffer> {
   const PDFDocument = (await import('pdfkit')).default;
-  const doc = new PDFDocument({ size: 'A4', margin: 40 });
+  const doc = new PDFDocument({ size: 'A4', margin: 40, bufferPages: true });
 
   const chunks: Buffer[] = [];
   doc.on('data', (c: Buffer) => chunks.push(c));
